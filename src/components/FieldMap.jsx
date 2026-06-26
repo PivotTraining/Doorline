@@ -1,8 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
-import { useStore, getState, DISPOS, addHome } from "../store";
+import { useStore, getState, DISPOS, addHome, setDoor } from "../store";
 import DoorEditor from "./DoorEditor.jsx";
+
+// fetch JSON with a hard timeout so the UI never hangs on a slow/offline network
+async function fetchJSON(url, ms = 6000) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  try {
+    const r = await fetch(url, { headers: { Accept: "application/json" }, signal: ctl.signal });
+    return await r.json();
+  } finally {
+    clearTimeout(t);
+  }
+}
 
 const TILES = {
   streets: {
@@ -112,11 +124,9 @@ export default function FieldMap({ repId = null, admin = false, height = 540 }) 
     if (!q.trim()) return;
     setBusy(true);
     try {
-      const r = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`,
-        { headers: { Accept: "application/json" } }
+      const data = await fetchJSON(
+        `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`
       );
-      const data = await r.json();
       if (data[0]) flyTo(+data[0].lat, +data[0].lon, 18);
       else alert("No match for that address.");
     } catch {
@@ -126,22 +136,20 @@ export default function FieldMap({ repId = null, admin = false, height = 540 }) 
     }
   };
 
-  const dropDoor = async (latlng) => {
+  const dropDoor = (latlng) => {
     if (!repId) return; // only droppable in rep edit mode
-    let addr = "";
-    try {
-      const r = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latlng.lat}&lon=${latlng.lng}`,
-        { headers: { Accept: "application/json" } }
-      );
-      const d = await r.json();
-      if (d?.address) {
-        const a = d.address;
-        addr = [a.house_number, a.road].filter(Boolean).join(" ") || d.display_name?.split(",")[0] || "";
-      }
-    } catch { /* offline — fall back to coords */ }
-    const home = addHome({ repId, lat: +latlng.lat.toFixed(6), lng: +latlng.lng.toFixed(6), addr });
+    // Create the door and open the editor immediately — never block on the network.
+    const home = addHome({ repId, lat: +latlng.lat.toFixed(6), lng: +latlng.lng.toFixed(6), addr: "" });
     setEditing(home);
+    // Best-effort reverse geocode in the background; fill in the address when it returns.
+    fetchJSON(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latlng.lat}&lon=${latlng.lng}`)
+      .then((d) => {
+        const a = d?.address;
+        if (!a) return;
+        const addr = [a.house_number, a.road].filter(Boolean).join(" ") || d.display_name?.split(",")[0];
+        if (addr) setDoor(home.id, { addr });
+      })
+      .catch(() => { /* offline — keep the coordinate label */ });
   };
 
   const t = TILES[layer];
