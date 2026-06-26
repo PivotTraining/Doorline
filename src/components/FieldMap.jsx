@@ -1,0 +1,214 @@
+import { useEffect, useRef, useState } from "react";
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
+import L from "leaflet";
+import { useStore, getState, DISPOS, addHome } from "../store";
+import DoorEditor from "./DoorEditor.jsx";
+
+const TILES = {
+  streets: {
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attr: '&copy; OpenStreetMap contributors',
+  },
+  satellite: {
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    attr: "Tiles &copy; Esri",
+  },
+};
+
+const ATLANTA = [33.749, -84.388];
+
+const doorIcon = (hex) =>
+  L.divIcon({
+    className: "door-icon",
+    html: `<div class="door-pin" style="width:16px;height:16px;background:${hex}"></div>`,
+    iconSize: [16, 16],
+    iconAnchor: [8, 16],
+    popupAnchor: [0, -16],
+  });
+
+const repIcon = (color) =>
+  L.divIcon({
+    className: "rep-icon",
+    html: `<div class="rep-dot" style="width:14px;height:14px;background:${color}"></div>`,
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+  });
+
+// Exposes the Leaflet map instance to the parent via a ref.
+function MapBinder({ mapRef }) {
+  const map = useMap();
+  useEffect(() => { mapRef.current = map; }, [map, mapRef]);
+  return null;
+}
+
+// Drops a door where the rep taps (edit mode only).
+function ClickToDrop({ onDrop }) {
+  useMapEvents({ click: (e) => onDrop?.(e.latlng) });
+  return null;
+}
+
+/**
+ * FieldMap
+ *  - repId    : when set, doors are filtered to this rep and the map is editable.
+ *  - admin    : read-only org-wide view with simulated live rep dots.
+ */
+export default function FieldMap({ repId = null, admin = false, height = 540 }) {
+  useStore();
+  const state = getState();
+  const mapRef = useRef(null);
+
+  const [layer, setLayer] = useState("streets");
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(null); // door being dispositioned
+  const [locating, setLocating] = useState(false);
+
+  const homes = admin ? state.homes : state.homes.filter((h) => h.repId === repId);
+  const reps = state.users.filter((u) => u.role === "rep" && u.status === "active");
+
+  // ---- simulated live rep dots (admin only) ----
+  const [repPos, setRepPos] = useState({});
+  useEffect(() => {
+    if (!admin) return;
+    // seed each rep near the centroid of their doors
+    const seedPos = {};
+    reps.forEach((r) => {
+      const hs = state.homes.filter((h) => h.repId === r.id);
+      if (hs.length) {
+        const lat = hs.reduce((a, h) => a + h.lat, 0) / hs.length;
+        const lng = hs.reduce((a, h) => a + h.lng, 0) / hs.length;
+        seedPos[r.id] = [lat, lng];
+      }
+    });
+    setRepPos(seedPos);
+    const t = setInterval(() => {
+      setRepPos((prev) => {
+        const next = {};
+        for (const id in prev) {
+          next[id] = [prev[id][0] + (Math.random() - 0.5) * 0.0008, prev[id][1] + (Math.random() - 0.5) * 0.0008];
+        }
+        return next;
+      });
+    }, 2000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [admin]);
+
+  // ---- actions ----
+  const flyTo = (lat, lng, z = 17) => mapRef.current?.flyTo([lat, lng], z, { duration: 0.8 });
+
+  const myLocation = () => {
+    if (!navigator.geolocation) return alert("Geolocation isn't available in this browser.");
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { setLocating(false); flyTo(pos.coords.latitude, pos.coords.longitude, 18); },
+      () => { setLocating(false); alert("Couldn't get your location. Check permissions."); },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  };
+
+  const geocode = async (e) => {
+    e?.preventDefault?.();
+    if (!q.trim()) return;
+    setBusy(true);
+    try {
+      const r = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`,
+        { headers: { Accept: "application/json" } }
+      );
+      const data = await r.json();
+      if (data[0]) flyTo(+data[0].lat, +data[0].lon, 18);
+      else alert("No match for that address.");
+    } catch {
+      alert("Address search needs an internet connection.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const dropDoor = async (latlng) => {
+    if (!repId) return; // only droppable in rep edit mode
+    let addr = "";
+    try {
+      const r = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latlng.lat}&lon=${latlng.lng}`,
+        { headers: { Accept: "application/json" } }
+      );
+      const d = await r.json();
+      if (d?.address) {
+        const a = d.address;
+        addr = [a.house_number, a.road].filter(Boolean).join(" ") || d.display_name?.split(",")[0] || "";
+      }
+    } catch { /* offline — fall back to coords */ }
+    const home = addHome({ repId, lat: +latlng.lat.toFixed(6), lng: +latlng.lng.toFixed(6), addr });
+    setEditing(home);
+  };
+
+  const t = TILES[layer];
+
+  return (
+    <div className="map-wrap" style={{ height }}>
+      <MapContainer center={ATLANTA} zoom={13} style={{ height: "100%", width: "100%" }} zoomControl={false}>
+        <MapBinder mapRef={mapRef} />
+        <TileLayer key={layer} url={t.url} attribution={t.attr} maxZoom={19} />
+        {repId && <ClickToDrop onDrop={dropDoor} />}
+
+        {homes.map((h) => (
+          <Marker
+            key={h.id}
+            position={[h.lat, h.lng]}
+            icon={doorIcon(DISPOS[h.status].hex)}
+            eventHandlers={repId ? { click: () => setEditing(h) } : undefined}
+          >
+            {admin && (
+              <Popup>
+                <strong>{h.addr}</strong>
+                <br />
+                <span style={{ color: DISPOS[h.status].hex }}>● {DISPOS[h.status].lab}</span>
+                <br />
+                <small>{repName(state, h.repId)}</small>
+                {h.notes && <><br /><small>{h.notes}</small></>}
+              </Popup>
+            )}
+          </Marker>
+        ))}
+
+        {admin &&
+          reps.map((r, i) =>
+            repPos[r.id] ? (
+              <Marker key={r.id} position={repPos[r.id]} icon={repIcon(REP_COLORS[i % REP_COLORS.length])}>
+                <Popup><strong>{r.name}</strong><br /><small>Live · {r.territory}</small></Popup>
+              </Marker>
+            ) : null
+          )}
+      </MapContainer>
+
+      <div className="map-controls">
+        <div className="seg">
+          <button className={layer === "streets" ? "on" : ""} onClick={() => setLayer("streets")}>Streets</button>
+          <button className={layer === "satellite" ? "on" : ""} onClick={() => setLayer("satellite")}>Satellite</button>
+        </div>
+        <form className="map-search" onSubmit={geocode}>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search address…" />
+          <button className="btn sm primary" type="submit" disabled={busy}>{busy ? "…" : "Go"}</button>
+        </form>
+        <button className="btn sm" onClick={myLocation} disabled={locating}>{locating ? "Locating…" : "📍 My location"}</button>
+      </div>
+
+      <div className="map-legend">
+        {Object.entries(DISPOS).map(([k, v]) => (
+          <div key={k} className="row" style={{ gap: 6 }}>
+            <span className="dot" style={{ background: v.hex }} /> {v.lab}
+          </div>
+        ))}
+      </div>
+
+      {editing && repId && <DoorEditor door={editing} onClose={() => setEditing(null)} />}
+    </div>
+  );
+}
+
+const REP_COLORS = ["#4f7cff", "#22c55e", "#f59e0b", "#a855f7", "#ef4444", "#14b8a6"];
+function repName(state, id) {
+  return state.users.find((u) => u.id === id)?.name || "Unassigned";
+}
