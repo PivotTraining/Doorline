@@ -22,9 +22,9 @@ create index on street_rows (rep_id, day);
 
 alter table street_rows enable row level security;
 create policy street_read on street_rows for select
-  using (org_id = current_org_id() and (rep_id = auth.uid() or current_role() in ('owner','admin','manager')));
+  using (org_id = current_org_id() and (rep_id = auth.uid() or current_user_role() in ('owner','admin','manager')));
 create policy street_write on street_rows for all
-  using (org_id = current_org_id() and (rep_id = auth.uid() or current_role() in ('owner','admin','manager')))
+  using (org_id = current_org_id() and (rep_id = auth.uid() or current_user_role() in ('owner','admin','manager')))
   with check (org_id = current_org_id());
 
 alter publication supabase_realtime add table street_rows;

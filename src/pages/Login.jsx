@@ -18,23 +18,20 @@ export default function Login() {
   const [pass, setPass] = useState("");
   const [err, setErr] = useState("");
 
-  const submit = async (e) => {
-    e?.preventDefault?.();
+  // One auth path for both the form and the quick-login buttons.
+  const attempt = async (em, pw) => {
     if (!DEMO) {
       // Live mode: real Supabase Auth, then hydrate + subscribe.
-      const { error } = await authSignIn(email.trim(), pass);
+      const { error } = await authSignIn(em.trim(), pw);
       if (error) return setErr(error.message);
       await initLive();
       return;
     }
-    const r = login(email.trim(), pass);
+    const r = login(em.trim(), pw);
     if (r.error) setErr(r.error);
   };
-  const quick = (q) => {
-    setEmail(q.email); setPass(q.pass); setErr("");
-    const r = login(q.email, q.pass);
-    if (r.error) setErr(r.error);
-  };
+  const submit = (e) => { e?.preventDefault?.(); attempt(email, pass); };
+  const quick = (q) => { setEmail(q.email); setPass(q.pass); setErr(""); attempt(q.email, q.pass); };
 
   return (
     <div className="login-wrap">

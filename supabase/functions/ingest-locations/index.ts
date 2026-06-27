@@ -8,6 +8,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!; // bypasses RLS; never leaves the edge
 const MAX_BATCH = 200;
 
@@ -21,9 +22,9 @@ Deno.serve(async (req) => {
   const token = auth.replace(/^Bearer\s+/i, "");
   if (!token) return json({ error: "unauthenticated" }, 401);
 
-  // Resolve the caller from their JWT (anon client + user token).
-  const asUser = createClient(SUPABASE_URL, token, { global: { headers: { Authorization: auth } } });
-  const { data: u } = await asUser.auth.getUser();
+  // Resolve the caller from their JWT (anon client + user token in the header).
+  const asUser = createClient(SUPABASE_URL, ANON_KEY, { global: { headers: { Authorization: auth } } });
+  const { data: u } = await asUser.auth.getUser(token);
   if (!u?.user) return json({ error: "unauthenticated" }, 401);
 
   // Service client for the privileged consent check + insert.
