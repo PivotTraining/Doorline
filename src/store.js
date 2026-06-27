@@ -7,6 +7,8 @@
 // ============================================================
 import { useSyncExternalStore } from "react";
 import { supabase, DEMO } from "./supabaseClient";
+import * as sync from "./api/sync";
+import * as M from "./api/mappers";
 
 const KEY = "doorline_state_v1";
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : "id" + Math.random().toString(36).slice(2));
@@ -156,59 +158,61 @@ export function logout() { state.sessionId = null; emit(); }
 export function addUser({ name, email, role, plan, territory, pass }) {
   if (state.users.some(u => u.email.toLowerCase() === email.toLowerCase())) return { error: "Email already in use" };
   const free = role === "admin" || role === "owner" || role === "viewer";
-  state.users.push({ id: uid(), name, email, pass: pass || "rep", role, status: "active", plan: free ? 0 : plan, territory });
-  emit(); push("profiles"); return {};
+  const u = { id: uid(), name, email, pass: pass || "rep", role, status: "active", plan: free ? 0 : plan, territory };
+  state.users.push(u);
+  emit(); push("profiles", u); return {};
 }
 export function updateUser(id, patch) {
   const u = state.users.find(x => x.id === id); if (!u) return;
   if (patch.role) { const free = ["admin", "owner", "viewer"].includes(patch.role); if (free) patch.plan = 0; }
-  Object.assign(u, patch); emit(); push("profiles");
+  Object.assign(u, patch); emit(); push("profiles", u);
 }
-export function removeUser(id) { state.users = state.users.filter(u => u.id !== id); emit(); push("profiles"); }
-export function toggleStatus(id) { const u = state.users.find(x => x.id === id); if (u) { u.status = u.status === "active" ? "deactivated" : "active"; emit(); push("profiles"); } }
+export function removeUser(id) { state.users = state.users.filter(u => u.id !== id); emit(); pushDel("profiles", id); }
+export function toggleStatus(id) { const u = state.users.find(x => x.id === id); if (u) { u.status = u.status === "active" ? "deactivated" : "active"; emit(); push("profiles", u); } }
 
 // ---------- doors / dispositions ----------
 export function addHome({ repId, lat, lng, addr }) {
   const h = { id: uid(), repId, lat, lng, addr: addr || `Door @ ${lat.toFixed(5)}, ${lng.toFixed(5)}`, status: "untouched", notes: "", contact: "", phone: "", due: "", activity: [] };
-  state.homes.push(h); emit(); push("homes"); return h;
+  state.homes.push(h); emit(); push("homes", h); return h;
 }
 export function setDoor(id, fields) {
   const h = state.homes.find(x => x.id === id); if (!h) return;
   Object.assign(h, fields);
   if (fields.status === "sold" && fields.deal) {
     const d = { id: uid(), repId: h.repId, homeId: h.id, customer: fields.deal.customer || "New customer", product: fields.deal.product, value: fields.deal.value || 0, addr: h.addr };
-    h.deal = d; state.deals.push(d); push("deals");
+    h.deal = d; state.deals.push(d); push("deals", d);
   }
-  emit(); push("homes");
+  emit(); push("homes", h);
 }
 
 // ---------- org / branding ----------
-export function setOrg(patch) { Object.assign(state.org, patch); emit(); push("org"); }
+export function setOrg(patch) { Object.assign(state.org, patch); emit(); push("organizations", state.org); }
 
 // ---------- bulletin board ----------
 export function addPost({ authorId, authorName, title, body }) {
-  state.posts.unshift({ id: uid(), authorId, authorName, title, body, ts: Date.now(), pinned: false });
-  emit(); push("posts");
+  const post = { id: uid(), authorId, authorName, title, body, ts: Date.now(), pinned: false };
+  state.posts.unshift(post);
+  emit(); push("posts", post);
 }
-export function removePost(id) { state.posts = state.posts.filter((p) => p.id !== id); emit(); push("posts"); }
-export function togglePin(id) { const p = state.posts.find((x) => x.id === id); if (p) { p.pinned = !p.pinned; emit(); push("posts"); } }
+export function removePost(id) { state.posts = state.posts.filter((p) => p.id !== id); emit(); pushDel("posts", id); }
+export function togglePin(id) { const p = state.posts.find((x) => x.id === id); if (p) { p.pinned = !p.pinned; emit(); push("posts", p); } }
 
 // ---------- territories (manager scheduling) ----------
-export function addTerritory(t) { state.territories.push({ id: uid(), color: "#2e90fa", notes: "", ...t }); emit(); push("territories"); }
-export function updateTerritory(id, patch) { const t = state.territories.find((x) => x.id === id); if (t) { Object.assign(t, patch); emit(); push("territories"); } }
-export function removeTerritory(id) { state.territories = state.territories.filter((t) => t.id !== id); emit(); push("territories"); }
+export function addTerritory(t) { const nt = { id: uid(), color: "#2e90fa", notes: "", ...t }; state.territories.push(nt); emit(); push("territories", nt); }
+export function updateTerritory(id, patch) { const t = state.territories.find((x) => x.id === id); if (t) { Object.assign(t, patch); emit(); push("territories", t); } }
+export function removeTerritory(id) { state.territories = state.territories.filter((t) => t.id !== id); emit(); pushDel("territories", id); }
 
 // ---------- door activity funnel ----------
 export function logActivity(homeId, type) {
   const h = state.homes.find((x) => x.id === homeId); if (!h) return;
   (h.activity = h.activity || []).push({ type, ts: Date.now() });
-  emit(); push("homes");
+  emit(); sync.activity(homeId, type);
 }
 
 // ---------- GPS tracking + presence + consent ----------
 export function setConsent(repId, consent) {
   const p = (state.presence[repId] = state.presence[repId] || {});
-  p.consent = consent; emit(); push("presence");
+  p.consent = consent; emit(); sync.consent(consent === "granted");
 }
 export function startSession(repId) {
   const p = (state.presence[repId] = state.presence[repId] || {});
@@ -221,7 +225,7 @@ export function addBreadcrumb(repId, pt) {
   const arr = (state.tracks[repId] = state.tracks[repId] || []);
   arr.push({ lat: +pt.lat.toFixed(6), lng: +pt.lng.toFixed(6), ts: Date.now() });
   if (arr.length > 600) arr.splice(0, arr.length - 600);
-  emit(); push("locations");
+  emit(); sync.location({ lat: pt.lat, lng: pt.lng });
 }
 export function clearTrack(repId) { state.tracks[repId] = []; emit(); }
 
@@ -239,11 +243,36 @@ export function repAccountability(repId) {
 export function resetDemo() { localStorage.removeItem(KEY); state = seed(); emit(); }
 
 // ---------- live write-through (no-op in DEMO) ----------
-async function push(table) {
-  if (DEMO || !supabase) return;
-  try {
-    // Best-effort sync. In production each action maps to a specific
-    // insert/update; this is the hook point. See supabase/schema.sql.
-    // Example: await supabase.from(table).upsert(rowFromState());
-  } catch (e) { /* swallow in prototype */ }
+// Delegates to the production data layer (src/api/sync.js), which is a
+// no-op unless Supabase keys are present. The component layer never changes.
+function push(table, entity) { sync.up(table, entity); }
+function pushDel(table, id) { sync.del(table, id); }
+
+// ---------- live hydration + realtime (live mode only) ----------
+// Replace local slices with a server snapshot (api/bootstrap.initLive()).
+export function loadSnapshot(snap, sessionId) {
+  state = { ...state, ...snap, sessionId: sessionId ?? state.sessionId };
+  state.tracks = state.tracks || {};
+  state.presence = state.presence || {};
+  emit();
+}
+// Merge a Realtime change into local state.
+export function applyRemote(table, payload) {
+  const row = payload.new, old = payload.old, ev = payload.eventType;
+  if (table === "homes" && row) {
+    const h = M.homeFromRow(row);
+    const i = state.homes.findIndex((x) => x.id === h.id);
+    if (i >= 0) state.homes[i] = { ...state.homes[i], ...h }; else state.homes.push(h);
+  } else if (table === "deals" && row) {
+    const d = M.dealFromRow(row);
+    if (!state.deals.some((x) => x.id === d.id)) state.deals.push(d);
+  } else if (table === "posts") {
+    if (ev === "DELETE") state.posts = state.posts.filter((p) => p.id !== old?.id);
+    else if (row) {
+      const p = M.postFromRow(row);
+      const i = state.posts.findIndex((x) => x.id === p.id);
+      if (i >= 0) state.posts[i] = p; else state.posts.unshift(p);
+    }
+  }
+  emit();
 }

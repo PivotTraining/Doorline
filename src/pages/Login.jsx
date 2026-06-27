@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useStore, getState, login } from "../store";
 import { DEMO } from "../supabaseClient";
+import { signIn as authSignIn } from "../api/auth";
+import { initLive } from "../api/bootstrap";
 import { useTheme, toggleTheme } from "../theme.js";
 
 const QUICK = [
@@ -16,8 +18,15 @@ export default function Login() {
   const [pass, setPass] = useState("");
   const [err, setErr] = useState("");
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e?.preventDefault?.();
+    if (!DEMO) {
+      // Live mode: real Supabase Auth, then hydrate + subscribe.
+      const { error } = await authSignIn(email.trim(), pass);
+      if (error) return setErr(error.message);
+      await initLive();
+      return;
+    }
     const r = login(email.trim(), pass);
     if (r.error) setErr(r.error);
   };

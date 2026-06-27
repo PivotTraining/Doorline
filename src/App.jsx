@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useStore, getState, currentUser, logout, ROLE_LABEL, resetDemo } from "./store";
 import { DEMO } from "./supabaseClient";
+import { initLive } from "./api/bootstrap";
 import { useTheme, toggleTheme } from "./theme.js";
 import RepTracker from "./components/RepTracker.jsx";
 
@@ -44,6 +45,8 @@ const ADMIN_NAV = [
 
 export default function App() {
   useStore(); // subscribe to the shared store
+  // Live mode: restore a Supabase session + subscribe to Realtime on load.
+  useEffect(() => { if (!DEMO) initLive(); }, []);
   const user = currentUser();
   if (!user) return <Login />;
   return <Shell user={user} />;

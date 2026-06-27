@@ -32,11 +32,31 @@ Because the store persists to local storage, what the rep did is still there whe
 
 The map is **Leaflet** with free **OpenStreetMap** street tiles, an **Esri** satellite layer, geolocation, and address geocoding via OpenStreetMap's **Nominatim**. These call the internet from your browser, so the map needs a connection. Free tiers are fine for a prototype but rate-limited; for production move to Mapbox or Google Maps with an API key, and add the Regrid parcel layer so every property loads automatically.
 
+## Architecture & production
+
+The full system design — components, data flow, the GPS-firehose ingestion path,
+caching layers, API surface, and scaling tiers — lives in:
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — system design & scaling
+- [`docs/API.md`](docs/API.md) — REST resources, RPC, realtime channels, edge function
+- [`supabase/migrations/`](supabase/migrations) — production schema (RLS, partitioned
+  `locations`, downsampled tracks, analytics matviews, realtime, cron)
+- [`supabase/functions/ingest-locations/`](supabase/functions/ingest-locations) — GPS batch ingestion (consent-gated)
+- [`src/api/`](src/api) — production data layer (auth, mappers, services, realtime, SWR cache,
+  offline location queue), wired into the store's write-through and gated by the `DEMO` switch.
+
 ## Go live with Supabase (multi-device sync)
 
-1. Create a Supabase project, run `supabase/schema.sql` (needs the `postgis` extension).
+1. Create a Supabase project (enable `postgis`); run the migrations in
+   `supabase/migrations/` in order. Deploy the `ingest-locations` edge function
+   and set its `SUPABASE_SERVICE_ROLE_KEY` secret.
 2. Copy `.env.example` to `.env`, fill in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
-3. The app leaves demo mode automatically. The store's action functions (`src/store.js`) already have the write-through hook points; wire each to its Supabase insert/update and add a Realtime subscription so reps and admins on different devices see each other live.
+3. The app leaves demo mode automatically: `src/api/bootstrap.initLive()` hydrates the
+   store from Supabase and subscribes to Realtime, `Login` switches to Supabase Auth, and
+   every store action writes through `src/api/sync.js`. The component layer never changes.
+
+The data layer's pure logic (mappers, SWR cache, offline GPS queue) is unit-tested:
+`node --test test/api.test.mjs`.
 
 ## Features
 
