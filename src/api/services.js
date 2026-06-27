@@ -11,13 +11,14 @@ const org = () => getCtx().orgId;
 
 // Initial hydrate: one round of reads → a store-shaped snapshot.
 export async function loadAll() {
-  const [o, profiles, homes, deals, posts, territories] = await Promise.all([
+  const [o, profiles, homes, deals, posts, territories, street] = await Promise.all([
     supabase.from("organizations").select("*").limit(1).single(),
     supabase.from("profiles").select("*"),
     supabase.from("homes").select("*"),
     supabase.from("deals").select("*, homes(addr)"),
     supabase.from("posts").select("*, profiles(full_name)"),
     supabase.from("territories").select("*"),
+    supabase.from("street_rows").select("*"),
   ]);
   return {
     org: o.data ? { name: o.data.name, logo: o.data.logo_path } : { name: "Doorline", logo: null },
@@ -26,6 +27,7 @@ export async function loadAll() {
     deals: (deals.data || []).map((r) => M.dealFromRow({ ...r, addr: r.homes?.addr })),
     posts: (posts.data || []).map((r) => M.postFromRow({ ...r, author_name: r.profiles?.full_name })),
     territories: (territories.data || []).map(M.territoryFromRow),
+    streetRows: (street.data || []).map(M.streetRowFromRow),
   };
 }
 
@@ -37,6 +39,8 @@ export const upsertPost      = (p)      => supabase.from("posts").upsert(M.postT
 export const deletePost      = (id)     => supabase.from("posts").delete().eq("id", id);
 export const upsertTerritory = (t)      => supabase.from("territories").upsert(M.territoryToRow(t, org()));
 export const deleteTerritory = (id)     => supabase.from("territories").delete().eq("id", id);
+export const upsertStreetRow = (r)      => supabase.from("street_rows").upsert(M.streetRowToRow(r, org()));
+export const deleteStreetRow = (id)     => supabase.from("street_rows").delete().eq("id", id);
 export const upsertOrg       = (o)      => supabase.from("organizations").update({ name: o.name, logo_path: o.logo }).eq("id", org());
 
 // Transactional / aggregate work via RPC.

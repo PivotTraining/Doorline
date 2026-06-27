@@ -34,6 +34,15 @@ export const ACTIONS = [
   { key: "followup", lab: "Follow-up set", hex: "#14b8a6" },
 ];
 export const ACTION_LAB = Object.fromEntries(ACTIONS.map((a) => [a.key, a]));
+// Digital "Street Sheet" — the columns from the paper TTS form.
+export const SHEET_COLS = [
+  { key: "nh", lab: "NH", title: "Not Home" },
+  { key: "rl", lab: "RL", title: "Reloop" },
+  { key: "dm", lab: "DM", title: "Decision Maker" },
+  { key: "bid", lab: "B/ID", title: "Bill or ID" },
+  { key: "d", lab: "D", title: "Deal" },
+  { key: "ni", lab: "NI", title: "Not Interested" },
+];
 
 // ---------- seed (demo) ----------
 function seed() {
@@ -102,7 +111,22 @@ function seed() {
     presence[r.id] = { online: false, since: null, consent: undefined };
   });
 
-  return { org, users, homes, deals, posts, territories, tracks, presence, sessionId: null };
+  // street sheet — seed one rep's sheet so the grid/rollup is populated
+  const day0 = new Date(now).toISOString().slice(0, 10);
+  const r0 = reps[0];
+  const mkRow = (street, f = {}, customer = "", comments = "", cb = "") =>
+    ({ id: uid(), repId: r0.id, date: day0, street, nh: false, rl: false, dm: false, bid: false, d: false, ni: false, customer, comments, cb, ...f });
+  const streetRows = [
+    mkRow("580 Noah Ave", { nh: true }),
+    mkRow("576 Noah Ave", { nh: true }),
+    mkRow("570 Noah Ave", { ni: true }, "", "Slammed door"),
+    mkRow("566 Noah Ave", { dm: true, bid: true }, "Sergio", "Got bill, PIPP"),
+    mkRow("562 Noah Ave", { nh: true }),
+    mkRow("540 Noah Ave", { dm: true, d: true }, "Balcony", "PIPP — closed"),
+    mkRow("509 Noah Ave", { rl: true }, "", "Come back later", "5:30"),
+  ];
+
+  return { org, users, homes, deals, posts, territories, tracks, presence, streetRows, sessionId: null };
 }
 
 // Fill in fields that older persisted state won't have (forward migration).
@@ -113,6 +137,7 @@ function hydrate(s) {
   s.territories = s.territories || [];
   s.tracks = s.tracks || {};
   s.presence = s.presence || {};
+  s.streetRows = s.streetRows || [];
   s.homes = (s.homes || []).map((h) => ({ activity: [], ...h }));
   return s;
 }
@@ -238,6 +263,35 @@ export function repAccountability(repId) {
   else if (t.length > 1) mins = Math.round((t[t.length - 1].ts - t[0].ts) / 60000);
   const doors = state.homes.filter((h) => h.repId === repId && (h.status !== "untouched" || (h.activity && h.activity.length))).length;
   return { mins, doors, points: t.length, online: !!p.online, consent: p.consent };
+}
+
+// ---------- street sheet ----------
+export function addStreetRow({ repId, date, street }) {
+  const r = { id: uid(), repId, date, street: street || "", nh: false, rl: false, dm: false, bid: false, d: false, ni: false, customer: "", comments: "", cb: "" };
+  state.streetRows.push(r); emit(); push("street_rows", r); return r;
+}
+export function updateStreetRow(id, patch) {
+  const r = state.streetRows.find((x) => x.id === id); if (!r) return;
+  Object.assign(r, patch); emit(); push("street_rows", r);
+}
+export function removeStreetRow(id) { state.streetRows = state.streetRows.filter((r) => r.id !== id); emit(); pushDel("street_rows", id); }
+
+// Tally the six columns (+ CB and total doors) for a set of rows.
+export function sheetTotals(rows) {
+  const t = { doors: rows.length, nh: 0, rl: 0, dm: 0, bid: 0, d: 0, ni: 0, cb: 0 };
+  rows.forEach((r) => {
+    SHEET_COLS.forEach((c) => { if (r[c.key]) t[c.key]++; });
+    if (r.cb) t.cb++;
+  });
+  return t;
+}
+// Office rollup: per-rep + grand totals (optionally for one date).
+export function officeRollup(date) {
+  const rows = date ? state.streetRows.filter((r) => r.date === date) : state.streetRows;
+  const reps = state.users.filter((u) => u.role === "rep");
+  const perRep = reps.map((rep) => ({ rep, ...sheetTotals(rows.filter((r) => r.repId === rep.id)) }));
+  const grand = sheetTotals(rows);
+  return { perRep, grand };
 }
 
 export function resetDemo() { localStorage.removeItem(KEY); state = seed(); emit(); }

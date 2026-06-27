@@ -18,6 +18,7 @@ export function up(table, e) {
   else if (table === "profiles") safe(S.upsertProfile(e));
   else if (table === "posts") safe(S.upsertPost(e));
   else if (table === "territories") safe(S.upsertTerritory(e));
+  else if (table === "street_rows") safe(S.upsertStreetRow(e));
   else if (table === "organizations") safe(S.upsertOrg(e));
 }
 export function del(table, id) {
@@ -25,6 +26,7 @@ export function del(table, id) {
   if (table === "profiles") safe(S.deleteProfile(id));
   else if (table === "posts") safe(S.deletePost(id));
   else if (table === "territories") safe(S.deleteTerritory(id));
+  else if (table === "street_rows") safe(S.deleteStreetRow(id));
 }
 export const activity = (homeId, type) => { if (live()) safe(S.recordActivity(homeId, type)); };
 export const consent = (granted) => { if (live()) safe(S.setConsentRpc(granted)); };

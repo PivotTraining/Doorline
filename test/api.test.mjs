@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import * as M from "../src/api/mappers.js";
 import { createCache } from "../src/api/cache.js";
 import { createLocationQueue } from "../src/api/locationQueue.js";
+import { pointInPolygon } from "../src/lib/geo.js";
 
 test("home round-trips through row mapping", () => {
   const h = { id: "h1", repId: "r1", addr: "1 Maple", lat: 33.7, lng: -84.3, status: "appt",
@@ -70,6 +71,13 @@ test("locationQueue retains buffer on failure (offline-safe), drains on success"
   assert.equal(r.accepted, 2);
   assert.equal(q.size(), 0);
   assert.equal(q.failures(), 0);
+});
+
+test("pointInPolygon: inside vs outside a square zone", () => {
+  const square = [[33.70, -84.40], [33.72, -84.40], [33.72, -84.38], [33.70, -84.38]];
+  assert.equal(pointInPolygon([33.71, -84.39], square), true);   // center
+  assert.equal(pointInPolygon([33.75, -84.39], square), false);  // north of zone
+  assert.equal(pointInPolygon([33.71, -84.50], square), false);  // west of zone
 });
 
 test("locationQueue backoff grows with consecutive failures", () => {

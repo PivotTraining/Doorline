@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, Polygon, useMap, useM
 import L from "leaflet";
 import { useStore, getState, DISPOS, addHome, setDoor } from "../store";
 import DoorEditor from "./DoorEditor.jsx";
+import { repZones, pointInPolygon } from "../lib/geo.js";
 
 // fetch JSON with a hard timeout so the UI never hangs on a slow/offline network
 async function fetchJSON(url, ms = 6000) {
@@ -77,6 +78,7 @@ export default function FieldMap({ repId = null, admin = false, height = 540 }) 
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(null); // door being dispositioned
   const [locating, setLocating] = useState(false);
+  const [warn, setWarn] = useState("");
   const [showPaths, setShowPaths] = useState(true);
   const [showZones, setShowZones] = useState(true);
 
@@ -146,6 +148,12 @@ export default function FieldMap({ repId = null, admin = false, height = 540 }) 
 
   const dropDoor = (latlng) => {
     if (!repId) return; // only droppable in rep edit mode
+    // Non-blocking accountability nudge if the door lands outside the rep's zone.
+    const myZones = repZones(state, repId);
+    if (myZones.length && !myZones.some((z) => pointInPolygon([latlng.lat, latlng.lng], z.boundary))) {
+      setWarn(`⚠ Outside your assigned zone (${myZones[0].name})`);
+      setTimeout(() => setWarn(""), 4000);
+    }
     // Create the door and open the editor immediately — never block on the network.
     const home = addHome({ repId, lat: +latlng.lat.toFixed(6), lng: +latlng.lng.toFixed(6), addr: "" });
     setEditing(home);
@@ -242,6 +250,14 @@ export default function FieldMap({ repId = null, admin = false, height = 540 }) 
           </div>
         ))}
       </div>
+
+      {warn && (
+        <div style={{ position: "absolute", zIndex: 600, top: 12, left: "50%", transform: "translateX(-50%)",
+          background: "var(--pill-amber-bg)", color: "var(--amber)", border: "1px solid var(--pill-amber-border)",
+          padding: "8px 14px", borderRadius: 999, fontSize: 13, fontWeight: 600, boxShadow: "var(--shadow)" }}>
+          {warn}
+        </div>
+      )}
 
       {editing && repId && <DoorEditor door={editing} onClose={() => setEditing(null)} />}
     </div>

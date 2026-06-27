@@ -10,6 +10,7 @@ import Bulletin from "./pages/Bulletin.jsx";
 // rep
 import MyDay from "./pages/rep/MyDay.jsx";
 import Doors from "./pages/rep/Doors.jsx";
+import StreetSheet from "./pages/rep/StreetSheet.jsx";
 import FollowUps from "./pages/rep/FollowUps.jsx";
 import MyDeals from "./pages/rep/MyDeals.jsx";
 import Leaderboard from "./pages/rep/Leaderboard.jsx";
@@ -19,6 +20,7 @@ import Personnel from "./pages/admin/Personnel.jsx";
 import TeamMap from "./pages/admin/TeamMap.jsx";
 import Territories from "./pages/admin/Territories.jsx";
 import ActivitySheet from "./pages/admin/ActivitySheet.jsx";
+import OfficeSheet from "./pages/admin/OfficeSheet.jsx";
 import Deals from "./pages/admin/Deals.jsx";
 import Billing from "./pages/admin/Billing.jsx";
 import Settings from "./pages/admin/Settings.jsx";
@@ -26,6 +28,7 @@ import Settings from "./pages/admin/Settings.jsx";
 const REP_NAV = [
   { id: "myday", label: "My Day", ico: "☀️", el: MyDay },
   { id: "doors", label: "Map / Doors", ico: "📍", el: Doors },
+  { id: "streetsheet", label: "Street Sheet", ico: "📝", el: StreetSheet },
   { id: "followups", label: "Follow-ups", ico: "🔁", el: FollowUps },
   { id: "mydeals", label: "My Deals", ico: "💰", el: MyDeals },
   { id: "leaderboard", label: "Leaderboard", ico: "🏆", el: Leaderboard },
@@ -37,6 +40,7 @@ const ADMIN_NAV = [
   { id: "teammap", label: "Team Map", ico: "🗺️", el: TeamMap },
   { id: "territories", label: "Territories", ico: "🧭", el: Territories },
   { id: "activity", label: "Activity Sheet", ico: "📋", el: ActivitySheet },
+  { id: "office", label: "Office Sheet", ico: "🏢", el: OfficeSheet },
   { id: "deals", label: "Deals", ico: "💼", el: Deals },
   { id: "bulletin", label: "Bulletin", ico: "📣", el: Bulletin },
   { id: "billing", label: "Billing", ico: "🧾", el: Billing },

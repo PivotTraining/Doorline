@@ -53,6 +53,17 @@ export const profileFromRow = (r) => ({
   territory: r.territory || "—", plan: r.seat_price_cents || 0,
 });
 
+export const streetRowToRow = (r, orgId) => ({
+  id: r.id, org_id: orgId, rep_id: r.repId, day: r.date, street: r.street || null,
+  nh: !!r.nh, rl: !!r.rl, dm: !!r.dm, bid: !!r.bid, d: !!r.d, ni: !!r.ni,
+  customer: r.customer || null, comments: r.comments || null, cb: r.cb || null,
+});
+export const streetRowFromRow = (r) => ({
+  id: r.id, repId: r.rep_id, date: r.day, street: r.street || "",
+  nh: !!r.nh, rl: !!r.rl, dm: !!r.dm, bid: !!r.bid, d: !!r.d, ni: !!r.ni,
+  customer: r.customer || "", comments: r.comments || "", cb: r.cb || "",
+});
+
 // GeoJSON Polygon <-> [[lat,lng],...] ring (lng/lat order in GeoJSON, closed ring).
 export function toPolygon(ring) {
   const closed = ring[0] && (ring[0][0] !== ring[ring.length - 1][0] || ring[0][1] !== ring[ring.length - 1][1])
