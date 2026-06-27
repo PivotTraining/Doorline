@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { login } from "../store";
+import { useStore, getState, login } from "../store";
 import { DEMO } from "../supabaseClient";
+import { useTheme, toggleTheme } from "../theme.js";
 
 const QUICK = [
   { label: "Admin / Owner", email: "admin@doorline.app", pass: "admin" },
@@ -8,6 +9,9 @@ const QUICK = [
 ];
 
 export default function Login() {
+  useStore();
+  useTheme();
+  const org = getState().org;
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
   const [err, setErr] = useState("");
@@ -25,9 +29,10 @@ export default function Login() {
 
   return (
     <div className="login-wrap">
+      <button className="icon-btn" onClick={toggleTheme} title="Toggle theme" style={{ position: "fixed", top: 16, right: 16 }}>🌗</button>
       <div className="login-card card">
-        <div className="logo-lg">D</div>
-        <h1 style={{ fontSize: 24 }}>Doorline</h1>
+        <div className="logo-lg">{org.logo ? <img src={org.logo} alt="" /> : (org.name?.[0]?.toUpperCase() || "D")}</div>
+        <h1 style={{ fontSize: 24 }}>{org.name || "Doorline"}</h1>
         <p className="muted" style={{ marginTop: 0 }}>Door-to-door sales — field & admin in one.</p>
 
         {err && <div className="err">{err}</div>}

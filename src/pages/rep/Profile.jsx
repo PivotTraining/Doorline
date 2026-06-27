@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { useStore, repStats, updateUser, ROLE_LABEL, PLAN_NAME } from "../../store";
+import { useStore, getState, repStats, updateUser, setConsent, ROLE_LABEL, PLAN_NAME } from "../../store";
 
 export default function Profile({ user }) {
   useStore();
   const [name, setName] = useState(user.name);
   const [saved, setSaved] = useState(false);
   const s = repStats(user.id);
+  const presence = getState().presence[user.id] || {};
+  const tracking = presence.consent === "granted";
 
   const save = () => {
     updateUser(user.id, { name: name.trim() || user.name });
@@ -56,6 +58,20 @@ export default function Profile({ user }) {
             <div className="n" style={{ color: "var(--green)" }}>{s.rate}%</div>
             <div className="l">Close rate</div>
           </div>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginTop: 14 }}>
+        <h3>📍 Location sharing</h3>
+        <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+          While on, Doorline records the route you cover during a shift so your effort is credited — even on doors you didn't log.
+          It only runs while you're signed in and stops when you sign out.
+        </p>
+        <div className="row between">
+          <span className="pill"><span className="dot" style={{ background: tracking ? "var(--green)" : "var(--muted)" }} /> {tracking ? "Sharing on" : "Off"}</span>
+          {tracking
+            ? <button className="btn" onClick={() => setConsent(user.id, "denied")}>Turn off</button>
+            : <button className="btn primary" onClick={() => setConsent(user.id, "granted")}>Turn on</button>}
         </div>
       </div>
     </>

@@ -38,22 +38,35 @@ The map is **Leaflet** with free **OpenStreetMap** street tiles, an **Esri** sat
 2. Copy `.env.example` to `.env`, fill in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 3. The app leaves demo mode automatically. The store's action functions (`src/store.js`) already have the write-through hook points; wire each to its Supabase insert/update and add a Realtime subscription so reps and admins on different devices see each other live.
 
+## Features
+
+- **Company branding** — admins upload a logo and set the company name (Settings); it shows app-wide and on sign-in.
+- **Bulletin board** — admins/managers broadcast announcements to the whole team; the latest shows on each rep's My Day.
+- **Light / dark themes** — lighter sky-blue palette, light by default, with a one-tap toggle in the top bar.
+- **Route tracking + accountability** — with a consent gate on sign-in, Doorline records each rep's route while signed in (real GPS when available, simulated in the browser demo) and stops on sign-out. The Team Map draws each rep's path and an accountability table (time on the clock vs. doors worked).
+- **Door activity funnel** — reps tap Knocked → Contact made → Presentation made → Follow-up set on each door, on top of the final outcome.
+- **Territory scheduling** — managers assign and date-schedule territory blocks to reps.
+
+> Note on tracking: a browser can only record location while the app is open. True background GPS (screen off, app closed) requires the native mobile rep app — sequenced next in the sprint plan. Continuous location tracking has legal/consent requirements; review with counsel before tracking real reps.
+
 ## Structure
 
 ```
 src/
   store.js              shared data + actions (localStorage now, Supabase-ready)
   supabaseClient.js     client + DEMO switch
-  App.jsx               shell, login gate, role-based nav
+  theme.js              light/dark preference (per device)
+  App.jsx               shell, login gate, role-based nav, theme toggle
   components/
     FieldMap.jsx        Leaflet map: streets/satellite, geolocate, geocode,
-                        drop door, disposition + deal capture, live rep dots
-    DoorEditor.jsx      disposition + deal capture modal
+                        drop door, disposition, live rep dots, route polylines
+    DoorEditor.jsx      activity funnel + disposition + deal capture modal
+    RepTracker.jsx      consent gate + GPS breadcrumb recorder
     Modal.jsx
   pages/
-    Login.jsx
+    Login.jsx  Bulletin.jsx
     rep/   MyDay, Doors, FollowUps, MyDeals, Leaderboard, Profile
-    admin/ Personnel, TeamMap, ActivitySheet, Deals, Billing
+    admin/ Personnel, TeamMap, Territories, ActivitySheet, Deals, Billing, Settings
 supabase/schema.sql     Postgres schema + RLS + homes/deals tables
 ```
 

@@ -24,6 +24,14 @@ export const DISPOS = {
   dnc:       { lab: "Do not contact", hex: "#64748b" },
 };
 export const PRODUCTS = ["Solar — Standard", "Solar — Premium", "Security System", "Internet / Telecom", "Pest Control — Annual", "Other"];
+// Granular door-activity funnel reps tap as they work a door (separate from the final outcome).
+export const ACTIONS = [
+  { key: "knocked", lab: "Door knocked", hex: "#38bdf8" },
+  { key: "contact", lab: "Contact made", hex: "#f59e0b" },
+  { key: "pitch", lab: "Presentation made", hex: "#a855f7" },
+  { key: "followup", lab: "Follow-up set", hex: "#14b8a6" },
+];
+export const ACTION_LAB = Object.fromEntries(ACTIONS.map((a) => [a.key, a]));
 
 // ---------- seed (demo) ----------
 function seed() {
@@ -47,7 +55,7 @@ function seed() {
       const lng = C[1] + (Math.random() - 0.5) * 0.018;
       const st = i < 2 ? "untouched" : statuses[Math.floor(Math.random() * statuses.length)];
       const h = { id: uid(), repId: r.id, lat: +lat.toFixed(6), lng: +lng.toFixed(6),
-        addr: (100 + i * 12) + " " + streets[i % streets.length], status: st, notes: "", contact: "", phone: "", due: "" };
+        addr: (100 + i * 12) + " " + streets[i % streets.length], status: st, notes: "", contact: "", phone: "", due: "", activity: [] };
       homes.push(h);
       if (st === "sold") {
         const val = 8000 + Math.floor(Math.random() * 20) * 1000;
@@ -56,12 +64,60 @@ function seed() {
       }
     }
   });
-  return { users, homes, deals, sessionId: null };
+
+  // company / org branding (logo is customizable by admins)
+  const org = { name: "Doorline", logo: null };
+
+  // bulletin board — admins broadcast to the whole team
+  const owner = users.find((u) => u.role === "owner");
+  const now = Date.now();
+  const posts = [
+    { id: uid(), authorId: owner.id, authorName: owner.name, title: "Welcome to the team 👋",
+      body: "Log every door on the map — knock, pitch, set follow-ups. Check this board for daily targets and shout-outs.",
+      ts: now - 3600e3, pinned: true },
+  ];
+
+  // territory schedule (managers assign date-bounded blocks to reps)
+  const day = 86400e3;
+  const tColors = ["#2e90fa", "#16a34a", "#f59e0b", "#a855f7"];
+  const territories = reps.map((r, i) => ({
+    id: uid(), name: r.territory + " District", color: tColors[i % tColors.length],
+    assignedTo: r.id, start: new Date(now).toISOString().slice(0, 10),
+    end: new Date(now + 5 * day).toISOString().slice(0, 10), notes: "",
+  }));
+
+  // GPS breadcrumb trails + presence (seeded so the path view is populated in demo)
+  const tracks = {}, presence = {};
+  reps.forEach((r) => {
+    const hs = homes.filter((h) => h.repId === r.id);
+    let [la, ln] = hs[0] ? [hs[0].lat, hs[0].lng] : C;
+    const pts = [];
+    for (let k = 0; k < 16; k++) {
+      la += (Math.random() - 0.5) * 0.0016; ln += (Math.random() - 0.5) * 0.0016;
+      pts.push({ lat: +la.toFixed(6), lng: +ln.toFixed(6), ts: now - (16 - k) * 10 * 60e3 });
+    }
+    tracks[r.id] = pts;
+    presence[r.id] = { online: false, since: null, consent: undefined };
+  });
+
+  return { org, users, homes, deals, posts, territories, tracks, presence, sessionId: null };
+}
+
+// Fill in fields that older persisted state won't have (forward migration).
+function hydrate(s) {
+  if (!s) return null;
+  s.org = s.org || { name: "Doorline", logo: null };
+  s.posts = s.posts || [];
+  s.territories = s.territories || [];
+  s.tracks = s.tracks || {};
+  s.presence = s.presence || {};
+  s.homes = (s.homes || []).map((h) => ({ activity: [], ...h }));
+  return s;
 }
 
 // ---------- state + subscription ----------
 function load() { try { return JSON.parse(localStorage.getItem(KEY)); } catch { return null; } }
-let state = load() || seed();
+let state = hydrate(load()) || seed();
 let version = 0;
 const listeners = new Set();
 function emit() { version++; localStorage.setItem(KEY, JSON.stringify(state)); listeners.forEach(l => l()); }
@@ -113,7 +169,7 @@ export function toggleStatus(id) { const u = state.users.find(x => x.id === id);
 
 // ---------- doors / dispositions ----------
 export function addHome({ repId, lat, lng, addr }) {
-  const h = { id: uid(), repId, lat, lng, addr: addr || `Door @ ${lat.toFixed(5)}, ${lng.toFixed(5)}`, status: "untouched", notes: "", contact: "", phone: "", due: "" };
+  const h = { id: uid(), repId, lat, lng, addr: addr || `Door @ ${lat.toFixed(5)}, ${lng.toFixed(5)}`, status: "untouched", notes: "", contact: "", phone: "", due: "", activity: [] };
   state.homes.push(h); emit(); push("homes"); return h;
 }
 export function setDoor(id, fields) {
@@ -124,6 +180,60 @@ export function setDoor(id, fields) {
     h.deal = d; state.deals.push(d); push("deals");
   }
   emit(); push("homes");
+}
+
+// ---------- org / branding ----------
+export function setOrg(patch) { Object.assign(state.org, patch); emit(); push("org"); }
+
+// ---------- bulletin board ----------
+export function addPost({ authorId, authorName, title, body }) {
+  state.posts.unshift({ id: uid(), authorId, authorName, title, body, ts: Date.now(), pinned: false });
+  emit(); push("posts");
+}
+export function removePost(id) { state.posts = state.posts.filter((p) => p.id !== id); emit(); push("posts"); }
+export function togglePin(id) { const p = state.posts.find((x) => x.id === id); if (p) { p.pinned = !p.pinned; emit(); push("posts"); } }
+
+// ---------- territories (manager scheduling) ----------
+export function addTerritory(t) { state.territories.push({ id: uid(), color: "#2e90fa", notes: "", ...t }); emit(); push("territories"); }
+export function updateTerritory(id, patch) { const t = state.territories.find((x) => x.id === id); if (t) { Object.assign(t, patch); emit(); push("territories"); } }
+export function removeTerritory(id) { state.territories = state.territories.filter((t) => t.id !== id); emit(); push("territories"); }
+
+// ---------- door activity funnel ----------
+export function logActivity(homeId, type) {
+  const h = state.homes.find((x) => x.id === homeId); if (!h) return;
+  (h.activity = h.activity || []).push({ type, ts: Date.now() });
+  emit(); push("homes");
+}
+
+// ---------- GPS tracking + presence + consent ----------
+export function setConsent(repId, consent) {
+  const p = (state.presence[repId] = state.presence[repId] || {});
+  p.consent = consent; emit(); push("presence");
+}
+export function startSession(repId) {
+  const p = (state.presence[repId] = state.presence[repId] || {});
+  p.online = true; p.since = Date.now(); emit();
+}
+export function endSession(repId) {
+  const p = state.presence[repId]; if (p) { p.online = false; emit(); }
+}
+export function addBreadcrumb(repId, pt) {
+  const arr = (state.tracks[repId] = state.tracks[repId] || []);
+  arr.push({ lat: +pt.lat.toFixed(6), lng: +pt.lng.toFixed(6), ts: Date.now() });
+  if (arr.length > 600) arr.splice(0, arr.length - 600);
+  emit(); push("locations");
+}
+export function clearTrack(repId) { state.tracks[repId] = []; emit(); }
+
+// Accountability: minutes online vs. doors actually worked this session.
+export function repAccountability(repId) {
+  const t = state.tracks[repId] || [];
+  const p = state.presence[repId] || {};
+  let mins = 0;
+  if (p.online && p.since) mins = Math.round((Date.now() - p.since) / 60000);
+  else if (t.length > 1) mins = Math.round((t[t.length - 1].ts - t[0].ts) / 60000);
+  const doors = state.homes.filter((h) => h.repId === repId && (h.status !== "untouched" || (h.activity && h.activity.length))).length;
+  return { mins, doors, points: t.length, online: !!p.online, consent: p.consent };
 }
 
 export function resetDemo() { localStorage.removeItem(KEY); state = seed(); emit(); }

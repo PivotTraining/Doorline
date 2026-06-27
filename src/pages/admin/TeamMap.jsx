@@ -1,18 +1,21 @@
-import { useStore, getState, DISPOS } from "../../store";
+import { useStore, getState, DISPOS, repAccountability } from "../../store";
 import FieldMap from "../../components/FieldMap.jsx";
+
+const dur = (m) => (m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`);
 
 export default function TeamMap() {
   useStore();
   const state = getState();
   const worked = state.homes.filter((h) => h.status !== "untouched");
   const counts = Object.keys(DISPOS).reduce((a, k) => ({ ...a, [k]: state.homes.filter((h) => h.status === k).length }), {});
+  const reps = state.users.filter((u) => u.role === "rep");
 
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Team Map</h1>
-          <p>Every door across the org, plus live rep positions (simulated in demo).</p>
+          <p>Every door across the org, each rep's route, and live positions. Toggle "Routes" on the map.</p>
         </div>
       </div>
 
@@ -23,7 +26,41 @@ export default function TeamMap() {
         <div className="card stat"><div className="n">{counts.sold}</div><div className="l">Sold</div></div>
       </div>
 
-      <FieldMap admin height={580} />
+      <FieldMap admin height={560} />
+
+      <div className="card" style={{ marginTop: 18 }}>
+        <h3>Field accountability</h3>
+        <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>Time on the clock vs. doors actually worked. Routes are recorded while a rep is signed in.</p>
+        <table className="tbl">
+          <thead>
+            <tr><th>Rep</th><th>Status</th><th>Time on</th><th>Doors worked</th><th>Route points</th><th>Effort</th></tr>
+          </thead>
+          <tbody>
+            {reps.map((r) => {
+              const a = repAccountability(r.id);
+              const perHr = a.mins ? (a.doors / (a.mins / 60)) : 0;
+              const flag = a.mins >= 120 && a.doors <= 3;
+              return (
+                <tr key={r.id}>
+                  <td>{r.name}</td>
+                  <td>
+                    <span className="pill">
+                      <span className="dot" style={{ background: a.online ? "var(--green)" : a.consent === "denied" ? "var(--red)" : "var(--muted)" }} />
+                      {a.online ? "online" : a.consent === "denied" ? "not sharing" : "offline"}
+                    </span>
+                  </td>
+                  <td className="muted">{dur(a.mins)}</td>
+                  <td>{a.doors}</td>
+                  <td className="muted">{a.points}</td>
+                  <td style={{ color: flag ? "var(--red)" : "var(--muted)" }}>
+                    {a.mins ? `${perHr.toFixed(1)}/hr` : "—"}{flag && " ⚠️"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }

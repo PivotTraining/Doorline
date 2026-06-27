@@ -10,6 +10,7 @@ export default function MyDay({ user }) {
   const recent = mine.filter((h) => h.status !== "untouched").slice(-6).reverse();
   const hour = new Date().getHours();
   const greet = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const announce = [...state.posts].sort((a, b) => (b.pinned - a.pinned) || (b.ts - a.ts))[0];
 
   return (
     <>
@@ -19,6 +20,14 @@ export default function MyDay({ user }) {
           <p>Territory: {user.territory} · Here's where today stands.</p>
         </div>
       </div>
+
+      {announce && (
+        <div className={"post" + (announce.pinned ? " pinned" : "")} style={{ marginBottom: 18 }}>
+          <div className="meta">📣 {announce.authorName} · team announcement</div>
+          <h4 style={{ margin: "4px 0 0" }}>{announce.title}</h4>
+          {announce.body && <div className="body">{announce.body}</div>}
+        </div>
+      )}
 
       <div className="cards grid-4" style={{ marginBottom: 18 }}>
         <Stat n={s.knocks} l="Doors worked" />

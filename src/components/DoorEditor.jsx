@@ -1,6 +1,8 @@
 import { useState } from "react";
 import Modal from "./Modal.jsx";
-import { DISPOS, PRODUCTS, setDoor } from "../store";
+import { DISPOS, PRODUCTS, ACTIONS, ACTION_LAB, setDoor, logActivity } from "../store";
+
+const fmtTime = (ts) => new Date(ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
 // Disposition + deal capture for a single door.
 // Picking "Sold" reveals the deal form; saving writes through the store.
@@ -13,6 +15,12 @@ export default function DoorEditor({ door, onClose }) {
   const [phone, setPhone] = useState(door.phone || "");
   const [due, setDue] = useState(door.due || "");
   const [deal, setDeal] = useState(door.deal || { customer: "", product: PRODUCTS[0], value: "" });
+  const [acts, setActs] = useState(door.activity || []);
+
+  const quick = (key) => {
+    logActivity(door.id, key);
+    setActs((a) => [...a, { type: key, ts: Date.now() }]);
+  };
 
   const save = () => {
     const fields = { status: status || "untouched", notes, contact, phone, due };
@@ -37,6 +45,22 @@ export default function DoorEditor({ door, onClose }) {
       <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
         {door.lat.toFixed(5)}, {door.lng.toFixed(5)}
       </p>
+
+      <span style={{ display: "block", fontSize: 13, color: "var(--muted)", marginBottom: 6 }}>Quick log</span>
+      <div className="row" style={{ marginBottom: acts.length ? 10 : 14 }}>
+        {ACTIONS.map((a) => (
+          <button key={a.key} className="btn sm" onClick={() => quick(a.key)}>
+            <span className="dot" style={{ background: a.hex }} /> {a.lab}
+          </button>
+        ))}
+      </div>
+      {acts.length > 0 && (
+        <div className="muted" style={{ fontSize: 12, marginBottom: 14, display: "grid", gap: 2 }}>
+          {acts.map((a, i) => (
+            <div key={i}>• {ACTION_LAB[a.type]?.lab || a.type} <span style={{ opacity: 0.7 }}>· {fmtTime(a.ts)}</span></div>
+          ))}
+        </div>
+      )}
 
       <span style={{ display: "block", fontSize: 13, color: "var(--muted)", marginBottom: 6 }}>Outcome</span>
       <div className="row" style={{ marginBottom: 14 }}>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import { useStore, getState, DISPOS, addHome, setDoor } from "../store";
 import DoorEditor from "./DoorEditor.jsx";
@@ -74,6 +74,7 @@ export default function FieldMap({ repId = null, admin = false, height = 540 }) 
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(null); // door being dispositioned
   const [locating, setLocating] = useState(false);
+  const [showPaths, setShowPaths] = useState(true);
 
   const homes = admin ? state.homes : state.homes.filter((h) => h.repId === repId);
   const reps = state.users.filter((u) => u.role === "rep" && u.status === "active");
@@ -181,6 +182,14 @@ export default function FieldMap({ repId = null, admin = false, height = 540 }) 
           </Marker>
         ))}
 
+        {admin && showPaths &&
+          reps.map((r, i) => {
+            const pts = (state.tracks[r.id] || []).map((p) => [p.lat, p.lng]);
+            return pts.length > 1 ? (
+              <Polyline key={"path" + r.id} positions={pts} pathOptions={{ color: REP_COLORS[i % REP_COLORS.length], weight: 3, opacity: 0.65 }} />
+            ) : null;
+          })}
+
         {admin &&
           reps.map((r, i) =>
             repPos[r.id] ? (
@@ -201,6 +210,11 @@ export default function FieldMap({ repId = null, admin = false, height = 540 }) 
           <button className="btn sm primary" type="submit" disabled={busy}>{busy ? "…" : "Go"}</button>
         </form>
         <button className="btn sm" onClick={myLocation} disabled={locating}>{locating ? "Locating…" : "📍 My location"}</button>
+        {admin && (
+          <label className="map-toggle">
+            <input type="checkbox" checked={showPaths} onChange={(e) => setShowPaths(e.target.checked)} /> Routes
+          </label>
+        )}
       </div>
 
       <div className="map-legend">
