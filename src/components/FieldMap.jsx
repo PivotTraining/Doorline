@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polyline, Polygon, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import { useStore, getState, DISPOS, addHome, setDoor } from "../store";
 import DoorEditor from "./DoorEditor.jsx";
@@ -78,9 +78,13 @@ export default function FieldMap({ repId = null, admin = false, height = 540 }) 
   const [editing, setEditing] = useState(null); // door being dispositioned
   const [locating, setLocating] = useState(false);
   const [showPaths, setShowPaths] = useState(true);
+  const [showZones, setShowZones] = useState(true);
 
   const homes = admin ? state.homes : state.homes.filter((h) => h.repId === repId);
   const reps = state.users.filter((u) => u.role === "rep" && u.status === "active");
+  // Territory zones: admins see all; a rep sees the zone(s) assigned to them.
+  const zones = (admin ? state.territories : state.territories.filter((t) => t.assignedTo === repId))
+    .filter((t) => t.boundary && t.boundary.length >= 3);
 
   // ---- simulated live rep dots (admin only) ----
   const [repPos, setRepPos] = useState({});
@@ -165,6 +169,12 @@ export default function FieldMap({ repId = null, admin = false, height = 540 }) 
         <TileLayer key={layer} url={t.url} attribution={t.attr} subdomains={t.subdomains} maxZoom={20} />
         {repId && <ClickToDrop onDrop={dropDoor} />}
 
+        {showZones && zones.map((z) => (
+          <Polygon key={"zone" + z.id} positions={z.boundary} pathOptions={{ color: z.color, weight: 2, fillOpacity: 0.1 }}>
+            <Popup><strong>{z.name}</strong><br /><small>{repName(state, z.assignedTo)}</small></Popup>
+          </Polygon>
+        ))}
+
         {homes.map((h) => (
           <Marker
             key={h.id}
@@ -216,6 +226,11 @@ export default function FieldMap({ repId = null, admin = false, height = 540 }) 
         {admin && (
           <label className="map-toggle">
             <input type="checkbox" checked={showPaths} onChange={(e) => setShowPaths(e.target.checked)} /> Routes
+          </label>
+        )}
+        {zones.length > 0 && (
+          <label className="map-toggle">
+            <input type="checkbox" checked={showZones} onChange={(e) => setShowZones(e.target.checked)} /> Zones
           </label>
         )}
       </div>

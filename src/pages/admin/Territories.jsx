@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useStore, getState, addTerritory, updateTerritory, removeTerritory, updateUser } from "../../store";
 import Modal from "../../components/Modal.jsx";
+import TerritoryMap from "../../components/TerritoryMap.jsx";
 
 const COLORS = ["#2e90fa", "#16a34a", "#f59e0b", "#a855f7", "#ef4444", "#14b8a6"];
 const today = () => new Date().toISOString().slice(0, 10);
@@ -12,6 +13,8 @@ export default function Territories({ user }) {
   const reps = state.users.filter((u) => u.role === "rep");
   const repName = (id) => state.users.find((u) => u.id === id)?.name || "Unassigned";
   const [form, setForm] = useState(null);
+  const [drawId, setDrawId] = useState(null);
+  const saveBoundary = (pts) => { updateTerritory(drawId, { boundary: pts }); setDrawId(null); };
 
   const open = (t) => setForm(t ? { ...t } : blank());
   const remove = (t) => {
@@ -47,13 +50,17 @@ export default function Territories({ user }) {
         <button className="btn primary" onClick={() => open()}>+ New territory</button>
       </div>
 
+      <div style={{ marginBottom: 18 }}>
+        <TerritoryMap territories={state.territories} editId={drawId} onSave={saveBoundary} onCancel={() => setDrawId(null)} />
+      </div>
+
       <div className="card">
         {state.territories.length === 0 ? (
           <p className="muted">No territories scheduled yet.</p>
         ) : (
           <table className="tbl">
             <thead>
-              <tr><th>Territory</th><th>Assigned to</th><th>Schedule</th><th>Notes</th><th></th></tr>
+              <tr><th>Territory</th><th>Assigned to</th><th>Schedule</th><th>Zone</th><th>Notes</th><th></th></tr>
             </thead>
             <tbody>
               {state.territories.map((t) => (
@@ -61,9 +68,11 @@ export default function Territories({ user }) {
                   <td><span className="pill"><span className="dot" style={{ background: t.color }} /> {t.name}</span></td>
                   <td>{repName(t.assignedTo)}</td>
                   <td className="muted">{t.start} → {t.end}</td>
-                  <td className="muted" style={{ maxWidth: 240 }}>{t.notes || "—"}</td>
+                  <td className="muted">{t.boundary && t.boundary.length >= 3 ? `▰ ${t.boundary.length} pts` : "—"}</td>
+                  <td className="muted" style={{ maxWidth: 200 }}>{t.notes || "—"}</td>
                   <td>
                     <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
+                      <button className="btn sm" onClick={() => setDrawId(t.id)} style={drawId === t.id ? { borderColor: t.color } : undefined}>Boundary</button>
                       <button className="btn sm" onClick={() => open(t)}>Edit</button>
                       <button className="btn sm danger" onClick={() => remove(t)}>Remove</button>
                     </div>

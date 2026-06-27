@@ -45,7 +45,7 @@ The map is **Leaflet** with free **OpenStreetMap** street tiles, an **Esri** sat
 - **Light / dark themes** — lighter sky-blue palette, light by default, with a one-tap toggle in the top bar.
 - **Route tracking + accountability** — with a consent gate on sign-in, Doorline records each rep's route while signed in (real GPS when available, simulated in the browser demo) and stops on sign-out. The Team Map draws each rep's path and an accountability table (time on the clock vs. doors worked).
 - **Door activity funnel** — reps tap Knocked → Contact made → Presentation made → Follow-up set on each door, on top of the final outcome.
-- **Territory scheduling** — managers assign and date-schedule territory blocks to reps.
+- **Territory scheduling & zones** — managers assign and date-schedule territory blocks to reps (the assignment updates the rep's territory everywhere), and draw each territory's boundary on the map — by tapping vertices or by loading a **ZIP code's outline**. Zones render on the Team Map and on the assigned rep's map.
 
 > Note on tracking: a browser can only record location while the app is open. True background GPS (screen off, app closed) requires the native mobile rep app — sequenced next in the sprint plan. Continuous location tracking has legal/consent requirements; review with counsel before tracking real reps.
 
