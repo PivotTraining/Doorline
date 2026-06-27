@@ -5,7 +5,7 @@
 // Live mode (Supabase keys present): the same actions write through to
 // Supabase. The component layer never changes.
 // ============================================================
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, useReducer, useRef, useEffect } from "react";
 import { supabase, DEMO } from "./supabaseClient";
 import * as sync from "./api/sync";
 import * as M from "./api/mappers";
@@ -147,12 +147,51 @@ function load() { try { return JSON.parse(localStorage.getItem(KEY)); } catch { 
 let state = hydrate(load()) || seed();
 let version = 0;
 const listeners = new Set();
-function emit() { version++; localStorage.setItem(KEY, JSON.stringify(state)); listeners.forEach(l => l()); }
+
+// Persistence is decoupled from notification: JSON.stringify + localStorage is
+// the expensive part, so we coalesce many mutations into a single idle-time
+// write instead of serializing the whole store on every keystroke/breadcrumb.
+let persistScheduled = false;
+const idle = typeof requestIdleCallback === "function"
+  ? (fn) => requestIdleCallback(fn, { timeout: 1000 })
+  : (fn) => setTimeout(fn, 250);
+function persistNow() {
+  persistScheduled = false;
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* quota/serialization */ }
+}
+function schedulePersist() { if (!persistScheduled) { persistScheduled = true; idle(persistNow); } }
+if (typeof window !== "undefined") {
+  const flush = () => { if (persistScheduled) persistNow(); };
+  window.addEventListener("pagehide", flush);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flush(); });
+}
+
+function emit() { version++; schedulePersist(); listeners.forEach((l) => l()); }
 
 export function getState() { return state; }
 export function getSnapshot() { return version; }
 export function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 export function useStore() { useSyncExternalStore(subscribe, getSnapshot); return state; }
+
+// Granular subscription: re-render only when selector(state) changes by isEqual.
+// Lets the shell/nav opt out of the firehose of data mutations.
+export function useSelector(selector, isEqual = Object.is) {
+  const [, force] = useReducer((c) => (c + 1) | 0, 0);
+  const selRef = useRef(selector); selRef.current = selector;
+  const valRef = useRef();
+  valRef.current = selector(state);
+  useEffect(() => {
+    let prev = valRef.current;
+    const check = () => {
+      const next = selRef.current(state);
+      if (!isEqual(prev, next)) { prev = next; valRef.current = next; force(); }
+    };
+    const unsub = subscribe(check);
+    check(); // catch changes between render and effect
+    return unsub;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return valRef.current;
+}
 
 // ---------- selectors ----------
 export function currentUser() { return state.users.find(u => u.id === state.sessionId) || null; }

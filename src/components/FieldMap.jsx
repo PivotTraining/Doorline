@@ -33,22 +33,35 @@ const TILES = {
 
 const ATLANTA = [33.749, -84.388];
 
-const doorIcon = (hex) =>
-  L.divIcon({
-    className: "door-icon",
-    html: `<div class="door-pin" style="width:16px;height:16px;background:${hex}"></div>`,
-    iconSize: [16, 16],
-    iconAnchor: [8, 16],
-    popupAnchor: [0, -16],
-  });
+// Icons are immutable per color — cache them so we don't allocate a new
+// Leaflet divIcon for every marker on every render.
+const _doorIcons = new Map();
+const doorIcon = (hex) => {
+  let icon = _doorIcons.get(hex);
+  if (!icon) {
+    icon = L.divIcon({
+      className: "door-icon",
+      html: `<div class="door-pin" style="width:16px;height:16px;background:${hex}"></div>`,
+      iconSize: [16, 16], iconAnchor: [8, 16], popupAnchor: [0, -16],
+    });
+    _doorIcons.set(hex, icon);
+  }
+  return icon;
+};
 
-const repIcon = (color) =>
-  L.divIcon({
-    className: "rep-icon",
-    html: `<div class="rep-dot" style="width:14px;height:14px;background:${color}"></div>`,
-    iconSize: [14, 14],
-    iconAnchor: [7, 7],
-  });
+const _repIcons = new Map();
+const repIcon = (color) => {
+  let icon = _repIcons.get(color);
+  if (!icon) {
+    icon = L.divIcon({
+      className: "rep-icon",
+      html: `<div class="rep-dot" style="width:14px;height:14px;background:${color}"></div>`,
+      iconSize: [14, 14], iconAnchor: [7, 7],
+    });
+    _repIcons.set(color, icon);
+  }
+  return icon;
+};
 
 // Exposes the Leaflet map instance to the parent via a ref.
 function MapBinder({ mapRef }) {
