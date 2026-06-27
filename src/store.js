@@ -262,7 +262,7 @@ export function removePost(id) { state.posts = state.posts.filter((p) => p.id !=
 export function togglePin(id) { const p = state.posts.find((x) => x.id === id); if (p) { p.pinned = !p.pinned; emit(); push("posts", p); } }
 
 // ---------- territories (manager scheduling) ----------
-export function addTerritory(t) { const nt = { id: uid(), color: "#2e90fa", notes: "", ...t }; state.territories.push(nt); emit(); push("territories", nt); }
+export function addTerritory(t) { const nt = { id: uid(), color: "#2e90fa", notes: "", ...t }; state.territories.push(nt); emit(); push("territories", nt); return nt; }
 export function updateTerritory(id, patch) { const t = state.territories.find((x) => x.id === id); if (t) { Object.assign(t, patch); emit(); push("territories", t); } }
 export function removeTerritory(id) { state.territories = state.territories.filter((t) => t.id !== id); emit(); pushDel("territories", id); }
 

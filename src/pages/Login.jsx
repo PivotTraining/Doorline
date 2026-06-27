@@ -10,7 +10,7 @@ const QUICK = [
   { label: "Field Rep", email: "jordan@doorline.app", pass: "rep" },
 ];
 
-export default function Login() {
+export default function Login({ onBack }) {
   useStore();
   useTheme();
   const org = getState().org;
@@ -36,6 +36,7 @@ export default function Login() {
   return (
     <div className="login-wrap">
       <button className="icon-btn" onClick={toggleTheme} title="Toggle theme" style={{ position: "fixed", top: 16, right: 16 }}>🌗</button>
+      {onBack && <a onClick={onBack} style={{ position: "fixed", top: 20, left: 20, cursor: "pointer", fontSize: 14, color: "var(--muted)" }}>← Back to site</a>}
       <div className="login-card card">
         <div className="logo-lg">{org.logo ? <img src={org.logo} alt="" /> : (org.name?.[0]?.toUpperCase() || "D")}</div>
         <h1 style={{ fontSize: 24 }}>{org.name || "Doorline"}</h1>

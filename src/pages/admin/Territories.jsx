@@ -1,134 +1,142 @@
 import { useState } from "react";
 import { useStore, getState, addTerritory, updateTerritory, removeTerritory, updateUser } from "../../store";
-import Modal from "../../components/Modal.jsx";
 import TerritoryMap from "../../components/TerritoryMap.jsx";
 
 const COLORS = ["#2e90fa", "#16a34a", "#f59e0b", "#a855f7", "#ef4444", "#14b8a6"];
 const today = () => new Date().toISOString().slice(0, 10);
-const blank = () => ({ name: "", assignedTo: "", color: COLORS[0], start: today(), end: today(), notes: "" });
+const initials = (name) => (name || "?").split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 
-export default function Territories({ user }) {
+export default function Territories() {
   useStore();
   const state = getState();
   const reps = state.users.filter((u) => u.role === "rep");
-  const repName = (id) => state.users.find((u) => u.id === id)?.name || "Unassigned";
-  const [form, setForm] = useState(null);
+  const repName = (id) => state.users.find((u) => u.id === id)?.name;
+  const [selId, setSelId] = useState(state.territories[0]?.id || null);
   const [drawId, setDrawId] = useState(null);
-  const saveBoundary = (pts) => { updateTerritory(drawId, { boundary: pts }); setDrawId(null); };
+  const sel = state.territories.find((t) => t.id === selId) || null;
 
-  const open = (t) => setForm(t ? { ...t } : blank());
-  const remove = (t) => {
+  const createNew = () => {
+    const t = addTerritory({ name: "New territory", color: COLORS[state.territories.length % COLORS.length], assignedTo: "", start: today(), end: today(), notes: "" });
+    setSelId(t.id);
+    setDrawId(null);
+  };
+  const patch = (p) => updateTerritory(selId, p);
+  const assign = (repId) => {
+    const prev = sel.assignedTo;
+    if (prev && prev !== repId) {
+      const old = state.users.find((u) => u.id === prev);
+      if (old && old.territory === sel.name) updateUser(old.id, { territory: "—" });
+    }
+    updateTerritory(selId, { assignedTo: repId });
+    if (repId) updateUser(repId, { territory: sel.name });
+  };
+  const saveBoundary = (pts) => { updateTerritory(drawId, { boundary: pts }); setDrawId(null); };
+  const del = (t) => {
     if (!confirm(`Remove ${t.name}?`)) return;
-    if (t.assignedTo) {
-      const u = state.users.find((x) => x.id === t.assignedTo);
-      if (u && u.territory === t.name) updateUser(u.id, { territory: "—" });
-    }
+    if (t.assignedTo) { const u = state.users.find((x) => x.id === t.assignedTo); if (u && u.territory === t.name) updateUser(u.id, { territory: "—" }); }
     removeTerritory(t.id);
+    if (selId === t.id) setSelId(null);
+    if (drawId === t.id) setDrawId(null);
   };
-  const submit = () => {
-    if (!form.name.trim()) return alert("Name the territory.");
-    // If this territory is being reassigned, clear it off the previous rep first.
-    const prev = form.id && state.territories.find((t) => t.id === form.id);
-    if (prev && prev.assignedTo && prev.assignedTo !== form.assignedTo) {
-      const old = state.users.find((u) => u.id === prev.assignedTo);
-      if (old && old.territory === prev.name) updateUser(old.id, { territory: "—" });
-    }
-    if (form.id) updateTerritory(form.id, form);
-    else addTerritory(form);
-    // Make the assignment "real": the rep's territory reflects this block.
-    if (form.assignedTo) updateUser(form.assignedTo, { territory: form.name });
-    setForm(null);
-  };
+
+  const hasZone = (t) => t.boundary && t.boundary.length >= 3;
 
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Territories</h1>
-          <p>Assign and schedule territory blocks for the team. (Managers & admins)</p>
+          <p>Design and stage the field — assign reps, schedule blocks, and draw each zone on the map.</p>
         </div>
-        <button className="btn primary" onClick={() => open()}>+ New territory</button>
+        <button className="btn primary" onClick={createNew}>+ New territory</button>
       </div>
 
-      <div style={{ marginBottom: 18 }}>
-        <TerritoryMap territories={state.territories} editId={drawId} onSave={saveBoundary} onCancel={() => setDrawId(null)} />
-      </div>
+      <div className="terr-layout">
+        {/* left: territory cards */}
+        <div className="terr-list">
+          {state.territories.length === 0 && <div className="card empty">No territories yet — create your first.</div>}
+          {state.territories.map((t) => (
+            <button key={t.id} className={"terr-card" + (t.id === selId ? " sel" : "")} style={{ "--c": t.color }} onClick={() => setSelId(t.id)}>
+              <div className="row between" style={{ marginBottom: 4 }}>
+                <span className="nm">{t.name}</span>
+                <span className="tag" style={{ borderColor: hasZone(t) ? t.color : undefined, color: hasZone(t) ? t.color : undefined }}>
+                  {hasZone(t) ? "▰ mapped" : "no zone"}
+                </span>
+              </div>
+              <div className="row" style={{ gap: 8 }}>
+                {t.assignedTo
+                  ? <span className="terr-avatar" style={{ background: t.color }}>{initials(repName(t.assignedTo))}</span>
+                  : <span className="terr-avatar muted-av">—</span>}
+                <small className="muted">{t.assignedTo ? repName(t.assignedTo) : "Unassigned"} · {t.start || "—"}→{t.end || "—"}</small>
+              </div>
+            </button>
+          ))}
+        </div>
 
-      <div className="card">
-        {state.territories.length === 0 ? (
-          <p className="muted">No territories scheduled yet.</p>
-        ) : (
-          <table className="tbl">
-            <thead>
-              <tr><th>Territory</th><th>Assigned to</th><th>Schedule</th><th>Zone</th><th>Notes</th><th></th></tr>
-            </thead>
-            <tbody>
-              {state.territories.map((t) => (
-                <tr key={t.id}>
-                  <td><span className="pill"><span className="dot" style={{ background: t.color }} /> {t.name}</span></td>
-                  <td>{repName(t.assignedTo)}</td>
-                  <td className="muted">{t.start} → {t.end}</td>
-                  <td className="muted">{t.boundary && t.boundary.length >= 3 ? `▰ ${t.boundary.length} pts` : "—"}</td>
-                  <td className="muted" style={{ maxWidth: 200 }}>{t.notes || "—"}</td>
-                  <td>
-                    <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
-                      <button className="btn sm" onClick={() => setDrawId(t.id)} style={drawId === t.id ? { borderColor: t.color } : undefined}>Boundary</button>
-                      <button className="btn sm" onClick={() => open(t)}>Edit</button>
-                      <button className="btn sm danger" onClick={() => remove(t)}>Remove</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+        {/* right: map + staging editor */}
+        <div className="terr-stage">
+          <TerritoryMap territories={state.territories} editId={drawId} onSave={saveBoundary} onCancel={() => setDrawId(null)} height={420} />
 
-      {form && (
-        <Modal
-          title={form.id ? "Edit territory" : "New territory"}
-          onClose={() => setForm(null)}
-          footer={<>
-            <button className="btn ghost" onClick={() => setForm(null)}>Cancel</button>
-            <button className="btn primary" onClick={submit}>{form.id ? "Save" : "Create"}</button>
-          </>}
-        >
-          <label className="field">
-            <span>Name</span>
-            <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="North District" />
-          </label>
-          <label className="field">
-            <span>Assign to rep</span>
-            <select className="select" value={form.assignedTo} onChange={(e) => setForm({ ...form, assignedTo: e.target.value })}>
-              <option value="">— Unassigned —</option>
-              {reps.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-            </select>
-          </label>
-          <div className="row" style={{ gap: 10 }}>
-            <label className="field" style={{ flex: 1 }}>
-              <span>Start</span>
-              <input className="input" type="date" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} />
-            </label>
-            <label className="field" style={{ flex: 1 }}>
-              <span>End</span>
-              <input className="input" type="date" value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} />
-            </label>
-          </div>
-          <label className="field">
-            <span>Color</span>
-            <div className="row" style={{ gap: 8 }}>
-              {COLORS.map((c) => (
-                <button key={c} onClick={() => setForm({ ...form, color: c })}
-                  style={{ width: 26, height: 26, borderRadius: 8, background: c, border: form.color === c ? "2px solid var(--text)" : "1px solid var(--border)", cursor: "pointer" }} />
-              ))}
+          {sel ? (
+            <div className="card" style={{ marginTop: 14 }}>
+              <div className="row between" style={{ marginBottom: 6 }}>
+                <h3 style={{ margin: 0 }}>Staging: {sel.name}</h3>
+                <button className="btn sm danger" onClick={() => del(sel)}>Delete</button>
+              </div>
+
+              <div className="grid-2 cards" style={{ gap: 12 }}>
+                <label className="field" style={{ margin: 0 }}>
+                  <span>Name</span>
+                  <input className="input" value={sel.name} onChange={(e) => patch({ name: e.target.value })} />
+                </label>
+                <label className="field" style={{ margin: 0 }}>
+                  <span>Assign rep</span>
+                  <select className="select" value={sel.assignedTo || ""} onChange={(e) => assign(e.target.value)}>
+                    <option value="">— Unassigned —</option>
+                    {reps.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  </select>
+                </label>
+                <label className="field" style={{ margin: 0 }}>
+                  <span>Start</span>
+                  <input className="input" type="date" value={sel.start || ""} onChange={(e) => patch({ start: e.target.value })} />
+                </label>
+                <label className="field" style={{ margin: 0 }}>
+                  <span>End</span>
+                  <input className="input" type="date" value={sel.end || ""} onChange={(e) => patch({ end: e.target.value })} />
+                </label>
+              </div>
+
+              <div style={{ marginTop: 12 }}>
+                <span style={{ display: "block", fontSize: 13, color: "var(--muted)", marginBottom: 6 }}>Color</span>
+                <div className="row" style={{ gap: 8 }}>
+                  {COLORS.map((c) => (
+                    <button key={c} onClick={() => patch({ color: c })}
+                      style={{ width: 26, height: 26, borderRadius: 8, background: c, border: sel.color === c ? "2px solid var(--text)" : "1px solid var(--border)", cursor: "pointer" }} />
+                  ))}
+                </div>
+              </div>
+
+              <label className="field" style={{ marginTop: 12 }}>
+                <span>Notes</span>
+                <textarea className="input" rows={2} value={sel.notes || ""} onChange={(e) => patch({ notes: e.target.value })} placeholder="Focus streets, goals…" />
+              </label>
+
+              <div className="row between" style={{ marginTop: 4 }}>
+                <span className="pill"><span className="dot" style={{ background: hasZone(sel) ? sel.color : "var(--muted)" }} /> {hasZone(sel) ? `Zone: ${sel.boundary.length} pts` : "No zone drawn"}</span>
+                <div className="row" style={{ gap: 8 }}>
+                  {hasZone(sel) && <button className="btn sm" onClick={() => patch({ boundary: [] })}>Clear zone</button>}
+                  <button className="btn sm primary" onClick={() => setDrawId(drawId === sel.id ? null : sel.id)} style={drawId === sel.id ? { background: "var(--amber)" } : undefined}>
+                    {drawId === sel.id ? "✓ Drawing… (use map)" : "✏️ Draw / ZIP zone"}
+                  </button>
+                </div>
+              </div>
+              {drawId === sel.id && <p className="muted" style={{ fontSize: 12, marginTop: 8, marginBottom: 0 }}>Tap the map to drop boundary points, or enter a ZIP — then “Save zone”.</p>}
             </div>
-          </label>
-          <label className="field" style={{ marginBottom: 0 }}>
-            <span>Notes</span>
-            <textarea className="input" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Focus streets, goals…" />
-          </label>
-        </Modal>
-      )}
+          ) : (
+            <div className="card empty" style={{ marginTop: 14 }}>Select a territory on the left to stage it, or create a new one.</div>
+          )}
+        </div>
+      </div>
     </>
   );
 }
