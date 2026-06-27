@@ -17,13 +17,16 @@ async function fetchJSON(url, ms = 6000) {
 }
 
 const TILES = {
+  // Colorful, Waze-like vector basemap (CARTO Voyager — free, no key).
+  vivid: {
+    url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
+    attr: '&copy; OpenStreetMap &copy; CARTO',
+    subdomains: "abcd",
+  },
   streets: {
     url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
     attr: '&copy; OpenStreetMap contributors',
-  },
-  satellite: {
-    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    attr: "Tiles &copy; Esri",
+    subdomains: "abc",
   },
 };
 
@@ -69,7 +72,7 @@ export default function FieldMap({ repId = null, admin = false, height = 540 }) 
   const state = getState();
   const mapRef = useRef(null);
 
-  const [layer, setLayer] = useState("streets");
+  const [layer, setLayer] = useState("vivid");
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(null); // door being dispositioned
@@ -159,7 +162,7 @@ export default function FieldMap({ repId = null, admin = false, height = 540 }) 
     <div className="map-wrap" style={{ height }}>
       <MapContainer center={ATLANTA} zoom={13} style={{ height: "100%", width: "100%" }} zoomControl={false}>
         <MapBinder mapRef={mapRef} />
-        <TileLayer key={layer} url={t.url} attribution={t.attr} maxZoom={19} />
+        <TileLayer key={layer} url={t.url} attribution={t.attr} subdomains={t.subdomains} maxZoom={20} />
         {repId && <ClickToDrop onDrop={dropDoor} />}
 
         {homes.map((h) => (
@@ -202,8 +205,8 @@ export default function FieldMap({ repId = null, admin = false, height = 540 }) 
 
       <div className="map-controls">
         <div className="seg">
+          <button className={layer === "vivid" ? "on" : ""} onClick={() => setLayer("vivid")}>Vivid</button>
           <button className={layer === "streets" ? "on" : ""} onClick={() => setLayer("streets")}>Streets</button>
-          <button className={layer === "satellite" ? "on" : ""} onClick={() => setLayer("satellite")}>Satellite</button>
         </div>
         <form className="map-search" onSubmit={geocode}>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search address…" />

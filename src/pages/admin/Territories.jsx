@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useStore, getState, addTerritory, updateTerritory, removeTerritory } from "../../store";
+import { useStore, getState, addTerritory, updateTerritory, removeTerritory, updateUser } from "../../store";
 import Modal from "../../components/Modal.jsx";
 
 const COLORS = ["#2e90fa", "#16a34a", "#f59e0b", "#a855f7", "#ef4444", "#14b8a6"];
@@ -14,10 +14,26 @@ export default function Territories({ user }) {
   const [form, setForm] = useState(null);
 
   const open = (t) => setForm(t ? { ...t } : blank());
+  const remove = (t) => {
+    if (!confirm(`Remove ${t.name}?`)) return;
+    if (t.assignedTo) {
+      const u = state.users.find((x) => x.id === t.assignedTo);
+      if (u && u.territory === t.name) updateUser(u.id, { territory: "—" });
+    }
+    removeTerritory(t.id);
+  };
   const submit = () => {
     if (!form.name.trim()) return alert("Name the territory.");
+    // If this territory is being reassigned, clear it off the previous rep first.
+    const prev = form.id && state.territories.find((t) => t.id === form.id);
+    if (prev && prev.assignedTo && prev.assignedTo !== form.assignedTo) {
+      const old = state.users.find((u) => u.id === prev.assignedTo);
+      if (old && old.territory === prev.name) updateUser(old.id, { territory: "—" });
+    }
     if (form.id) updateTerritory(form.id, form);
     else addTerritory(form);
+    // Make the assignment "real": the rep's territory reflects this block.
+    if (form.assignedTo) updateUser(form.assignedTo, { territory: form.name });
     setForm(null);
   };
 
@@ -49,7 +65,7 @@ export default function Territories({ user }) {
                   <td>
                     <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
                       <button className="btn sm" onClick={() => open(t)}>Edit</button>
-                      <button className="btn sm danger" onClick={() => { if (confirm(`Remove ${t.name}?`)) removeTerritory(t.id); }}>Remove</button>
+                      <button className="btn sm danger" onClick={() => remove(t)}>Remove</button>
                     </div>
                   </td>
                 </tr>
