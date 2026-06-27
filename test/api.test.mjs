@@ -6,6 +6,7 @@ import * as M from "../src/api/mappers.js";
 import { createCache } from "../src/api/cache.js";
 import { createLocationQueue } from "../src/api/locationQueue.js";
 import { pointInPolygon } from "../src/lib/geo.js";
+import { toCSV } from "../src/lib/csv.js";
 
 test("home round-trips through row mapping", () => {
   const h = { id: "h1", repId: "r1", addr: "1 Maple", lat: 33.7, lng: -84.3, status: "appt",
@@ -78,6 +79,15 @@ test("pointInPolygon: inside vs outside a square zone", () => {
   assert.equal(pointInPolygon([33.71, -84.39], square), true);   // center
   assert.equal(pointInPolygon([33.75, -84.39], square), false);  // north of zone
   assert.equal(pointInPolygon([33.71, -84.50], square), false);  // west of zone
+});
+
+test("toCSV: headers, ordering, and escaping", () => {
+  const csv = toCSV([{ Rep: "Jordan", Note: 'said "no, thanks"', Doors: 7 }, { Rep: "Tasha", Note: "a,b", Doors: 3 }]);
+  const lines = csv.split("\n");
+  assert.equal(lines[0], "Rep,Note,Doors");
+  assert.equal(lines[1], 'Jordan,"said ""no, thanks""",7');
+  assert.equal(lines[2], 'Tasha,"a,b",3');
+  assert.equal(toCSV([]), "");
 });
 
 test("locationQueue backoff grows with consecutive failures", () => {

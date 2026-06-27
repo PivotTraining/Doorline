@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useStore, getState, SHEET_COLS, officeRollup } from "../../store";
+import { downloadCSV, stamp } from "../../lib/csv.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -9,6 +10,10 @@ export default function OfficeSheet() {
   const [date, setDate] = useState(today());
   const [scope, setScope] = useState("day"); // day | all
   const { perRep, grand } = officeRollup(scope === "day" ? date : null);
+
+  const exportCSV = () => downloadCSV(`office-${scope === "day" ? date : "all"}.csv`, perRep.map(({ rep, ...t }) => ({
+    Rep: rep.name, Doors: t.doors, NH: t.nh, RL: t.rl, DM: t.dm, "B/ID": t.bid, D: t.d, NI: t.ni, CB: t.cb,
+  })));
 
   return (
     <>
@@ -23,6 +28,7 @@ export default function OfficeSheet() {
             <option value="all">All time</option>
           </select>
           {scope === "day" && <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ width: "auto" }} />}
+          <button className="btn" onClick={exportCSV}>⤓ Export CSV</button>
         </div>
       </div>
 

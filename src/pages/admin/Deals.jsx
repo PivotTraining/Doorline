@@ -1,9 +1,13 @@
 import { useStore, getState } from "../../store";
+import { downloadCSV, stamp } from "../../lib/csv.js";
 
 export default function Deals() {
   useStore();
   const state = getState();
   const name = (id) => state.users.find((u) => u.id === id)?.name || "—";
+  const exportCSV = () => downloadCSV(`deals-${stamp()}.csv`, state.deals.map((d) => ({
+    Customer: d.customer, Rep: name(d.repId), Product: d.product, Address: d.addr || "", Value: d.value || 0,
+  })));
   const total = state.deals.reduce((a, d) => a + (d.value || 0), 0);
   const avg = state.deals.length ? Math.round(total / state.deals.length) : 0;
 
@@ -18,6 +22,7 @@ export default function Deals() {
           <h1>Deals</h1>
           <p>Closed business across the whole team.</p>
         </div>
+        <button className="btn" onClick={exportCSV} disabled={state.deals.length === 0}>⤓ Export CSV</button>
       </div>
 
       <div className="cards grid-3" style={{ marginBottom: 18 }}>

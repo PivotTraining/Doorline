@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useStore, getState, DISPOS } from "../../store";
+import { downloadCSV, stamp } from "../../lib/csv.js";
 
 export default function ActivitySheet() {
   useStore();
@@ -12,6 +13,11 @@ export default function ActivitySheet() {
   let rows = state.homes.filter((h) => h.status !== "untouched");
   if (rep !== "all") rows = rows.filter((h) => h.repId === rep);
   if (status !== "all") rows = rows.filter((h) => h.status === status);
+
+  const exportCSV = () => downloadCSV(`activity-${stamp()}.csv`, rows.map((h) => ({
+    Rep: name(h.repId), Address: h.addr, Outcome: DISPOS[h.status].lab,
+    Contact: h.contact || "", Phone: h.phone || "", Due: h.due || "", Notes: h.notes || "",
+  })));
 
   return (
     <>
@@ -29,6 +35,7 @@ export default function ActivitySheet() {
             <option value="all">All outcomes</option>
             {Object.entries(DISPOS).map(([k, v]) => <option key={k} value={k}>{v.lab}</option>)}
           </select>
+          <button className="btn" onClick={exportCSV} disabled={rows.length === 0}>⤓ Export CSV</button>
         </div>
       </div>
 

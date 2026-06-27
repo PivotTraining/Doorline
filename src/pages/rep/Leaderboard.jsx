@@ -1,4 +1,5 @@
 import { useStore, getState, repStats } from "../../store";
+import { downloadCSV, stamp } from "../../lib/csv.js";
 
 export default function Leaderboard({ user }) {
   useStore();
@@ -13,6 +14,10 @@ export default function Leaderboard({ user }) {
     .sort((a, b) => b.revenue - a.revenue || b.closes - a.closes);
 
   const medal = (i) => (i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}`);
+  const exportCSV = () => downloadCSV(`leaderboard-${stamp()}.csv`, reps.map((r, i) => ({
+    Rank: i + 1, Rep: r.name, Doors: r.knocks, Conversations: r.contacts, Appointments: r.appts,
+    Sales: r.closes, "Close%": r.rate, Revenue: r.revenue,
+  })));
 
   return (
     <>
@@ -21,6 +26,7 @@ export default function Leaderboard({ user }) {
           <h1>Leaderboard</h1>
           <p>Ranked by contract value, then sales.</p>
         </div>
+        <button className="btn" onClick={exportCSV}>⤓ Export CSV</button>
       </div>
 
       <div className="card">
