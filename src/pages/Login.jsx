@@ -4,6 +4,7 @@ import { DEMO } from "../supabaseClient";
 import { signIn as authSignIn } from "../api/auth";
 import { initLive } from "../api/bootstrap";
 import { useTheme, toggleTheme } from "../theme.js";
+import Logo from "../components/Logo.jsx";
 
 const QUICK = [
   { label: "Admin / Owner", email: "admin@doorline.app", pass: "admin" },
@@ -38,7 +39,7 @@ export default function Login({ onBack }) {
       <button className="icon-btn" onClick={toggleTheme} title="Toggle theme" style={{ position: "fixed", top: 16, right: 16 }}>🌗</button>
       {onBack && <a onClick={onBack} style={{ position: "fixed", top: 20, left: 20, cursor: "pointer", fontSize: 14, color: "var(--muted)" }}>← Back to site</a>}
       <div className="login-card card">
-        <div className="logo-lg">{org.logo ? <img src={org.logo} alt="" /> : (org.name?.[0]?.toUpperCase() || "D")}</div>
+        <div style={{ marginBottom: 14 }}>{org.logo ? <div className="logo-lg" style={{ marginBottom: 0 }}><img src={org.logo} alt="" /></div> : <Logo size={46} />}</div>
         <h1 style={{ fontSize: 24 }}>{org.name || "Doorline"}</h1>
         <p className="muted" style={{ marginTop: 0 }}>Door-to-door sales — field & admin in one.</p>
 

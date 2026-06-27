@@ -256,6 +256,14 @@ table.tbl tfoot td { border-bottom: 0; }
 .hero-mock .kpi span { display: block; font-size: 11px; color: var(--muted); }
 .hero-pin { position: absolute; width: 14px; height: 14px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,.4); }
 
+.hero-shot { border: 1px solid var(--border); border-radius: 16px; overflow: hidden; box-shadow: 0 24px 60px rgba(10,25,50,.18); background: var(--panel); }
+.hero-shot img { width: 100%; height: auto; display: block; }
+.lp-shots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; margin-top: 30px; }
+.lp-shots .shot { margin: 0; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow); background: var(--panel); }
+.lp-shots .shot img { width: 100%; height: auto; display: block; border-bottom: 1px solid var(--border); }
+.lp-shots .shot figcaption { padding: 11px 14px; font-size: 13px; color: var(--muted); font-weight: 600; }
+@media (max-width: 860px) { .lp-shots { grid-template-columns: 1fr; } }
+
 .lp-section { padding: 56px 0; }
 .lp-section h2 { font-size: 32px; letter-spacing: -.02em; text-align: center; }
 .lp-section .lead { text-align: center; color: var(--muted); max-width: 56ch; margin: 8px auto 0; }

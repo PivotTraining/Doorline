@@ -1,5 +1,6 @@
 import { getState, useStore } from "../store";
 import { useTheme, toggleTheme } from "../theme.js";
+import Logo from "../components/Logo.jsx";
 
 const FEATURES = [
   { ic: "🛰️", t: "GPS routes & accountability", d: "See where every rep actually worked — live routes on the map and hours-on vs. doors-knocked, even on doors they forgot to log." },
@@ -8,6 +9,13 @@ const FEATURES = [
   { ic: "🗺️", t: "Live team map", d: "Every door and rep across the org on one colorful map — dispositions, deals, and live dots in real time." },
   { ic: "📣", t: "Bulletin board", d: "Push daily targets and shout-outs to the whole team. The latest hits every rep's home screen." },
   { ic: "💰", t: "Deals & leaderboard", d: "Capture a sale at the door, track contract value, and rank the team by revenue and close rate automatically." },
+];
+
+const SHOTS = [
+  { src: "/shots/street-sheet.jpg", t: "Digital Street Sheet — the clipboard, digitized" },
+  { src: "/shots/leaderboard.jpg", t: "Auto-ranked team leaderboard" },
+  { src: "/shots/deals.jpg", t: "Deals & pipeline by product" },
+  { src: "/shots/personnel.jpg", t: "Personnel & billing in one console" },
 ];
 
 const STEPS = [
@@ -37,7 +45,7 @@ export default function Landing({ onEnter }) {
       <nav className="lp-nav">
         <div className="in">
           <div className="lp-brand">
-            <div className="logo" style={{ width: 28, height: 28 }}>{org.logo ? <img src={org.logo} alt="" /> : "D"}</div>
+            {org.logo ? <div className="logo" style={{ width: 28, height: 28 }}><img src={org.logo} alt="" /></div> : <Logo size={28} />}
             {org.name || "Doorline"}
           </div>
           <div className="links">
@@ -64,22 +72,9 @@ export default function Landing({ onEnter }) {
             <div className="lp-note">No credit card to try the demo · Works on any phone or laptop</div>
           </div>
 
-          {/* lightweight product mock */}
-          <div className="hero-mock">
-            <div className="mock-map">
-              <svg className="route" viewBox="0 0 400 180" preserveAspectRatio="none">
-                <polyline points="40,150 90,120 130,135 180,80 240,95 300,50 360,70" fill="none" stroke="var(--brand)" strokeWidth="3" strokeLinecap="round" opacity="0.85" />
-              </svg>
-              <span className="hero-pin" style={{ left: 84, top: 112, background: "#f59e0b" }} />
-              <span className="hero-pin" style={{ left: 234, top: 88, background: "#a855f7" }} />
-              <span className="hero-pin" style={{ left: 294, top: 44, background: "#22c55e" }} />
-              <span className="rep-dot" style={{ position: "absolute", left: 352, top: 64, width: 12, height: 12, background: "var(--brand)" }} />
-            </div>
-            <div className="kpis">
-              <div className="kpi"><b>128</b><span>Doors today</span></div>
-              <div className="kpi"><b>14</b><span>Appointments</span></div>
-              <div className="kpi"><b style={{ color: "var(--green)" }}>$42k</b><span>Pipeline</span></div>
-            </div>
+          {/* real product screenshot */}
+          <div className="hero-shot">
+            <img src="/shots/office-sheet.jpg" alt="Doorline office dashboard — live rollup of every rep's street sheet" width="1280" height="820" />
           </div>
         </section>
 
@@ -94,6 +89,20 @@ export default function Landing({ onEnter }) {
                 <h3>{f.t}</h3>
                 <p>{f.d}</p>
               </div>
+            ))}
+          </div>
+        </section>
+
+        {/* screenshots */}
+        <section className="lp-section" style={{ paddingTop: 0 }}>
+          <h2>See it in action</h2>
+          <p className="lead">Real screens from the field and the office.</p>
+          <div className="lp-shots">
+            {SHOTS.map((s) => (
+              <figure className="shot" key={s.src}>
+                <img src={s.src} alt={s.t} loading="lazy" width="1280" height="820" />
+                <figcaption>{s.t}</figcaption>
+              </figure>
             ))}
           </div>
         </section>
