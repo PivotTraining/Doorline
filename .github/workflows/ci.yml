@@ -17,6 +17,6 @@ jobs:
       - name: Install
         run: npm ci
       - name: Unit tests
-        run: node --test test/
+        run: node --test test/*.test.mjs
       - name: Build
         run: npm run build
