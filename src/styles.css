@@ -208,6 +208,17 @@ table.tbl tfoot td { border-bottom: 0; }
 .logo-drop { width: 96px; height: 96px; border-radius: 14px; border: 1px dashed var(--border); background: var(--panel-2); display: grid; place-items: center; overflow: hidden; cursor: pointer; }
 .logo-drop img { width: 100%; height: 100%; object-fit: cover; }
 
+/* ---------- follow-up nudge bell ---------- */
+.bell-wrap { position: relative; }
+.bell-badge { position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--red); color: #fff; font-size: 10px; font-weight: 800; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--panel); }
+.bell-backdrop { position: fixed; inset: 0; z-index: 40; }
+.bell-panel { position: absolute; top: 44px; right: 0; z-index: 50; width: 340px; max-width: 86vw; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 24px 60px rgba(10,25,50,.30); overflow: hidden; }
+.bell-head { padding: 11px 14px; font-weight: 650; border-bottom: 1px solid var(--border); font-size: 14px; }
+.bell-empty { padding: 22px 14px; text-align: center; color: var(--muted); font-size: 14px; }
+.bell-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.bell-item:last-child { border-bottom: 0; }
+.bell-item .nm { font-weight: 600; font-size: 14px; }
+
 /* ---------- territories (design & stage) ---------- */
 .terr-layout { display: grid; grid-template-columns: 320px 1fr; gap: 16px; align-items: start; }
 .terr-list { display: grid; gap: 10px; max-height: 78vh; overflow: auto; padding-right: 2px; }

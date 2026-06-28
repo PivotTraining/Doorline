@@ -56,12 +56,14 @@ export const profileFromRow = (r) => ({
 export const streetRowToRow = (r, orgId) => ({
   id: r.id, org_id: orgId, rep_id: r.repId, day: r.date, street: r.street || null,
   nh: !!r.nh, rl: !!r.rl, dm: !!r.dm, bid: !!r.bid, d: !!r.d, ni: !!r.ni,
-  customer: r.customer || null, comments: r.comments || null, cb: r.cb || null,
+  customer: r.customer || null, phone: r.phone || null, comments: r.comments || null, cb: r.cb || null,
+  done: !!r.done, snooze_until: r.snoozeUntil || 0,
 });
 export const streetRowFromRow = (r) => ({
   id: r.id, repId: r.rep_id, date: r.day, street: r.street || "",
   nh: !!r.nh, rl: !!r.rl, dm: !!r.dm, bid: !!r.bid, d: !!r.d, ni: !!r.ni,
-  customer: r.customer || "", comments: r.comments || "", cb: r.cb || "",
+  customer: r.customer || "", phone: r.phone || "", comments: r.comments || "", cb: r.cb || "",
+  done: !!r.done, snoozeUntil: r.snooze_until || 0, createdAt: r.created_at ? Date.parse(r.created_at) : Date.now(),
 });
 
 // GeoJSON Polygon <-> [[lat,lng],...] ring (lng/lat order in GeoJSON, closed ring).

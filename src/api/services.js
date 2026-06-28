@@ -41,7 +41,7 @@ export const upsertTerritory = (t)      => supabase.from("territories").upsert(M
 export const deleteTerritory = (id)     => supabase.from("territories").delete().eq("id", id);
 export const upsertStreetRow = (r)      => supabase.from("street_rows").upsert(M.streetRowToRow(r, org()));
 export const deleteStreetRow = (id)     => supabase.from("street_rows").delete().eq("id", id);
-export const upsertOrg       = (o)      => supabase.from("organizations").update({ name: o.name, logo_path: o.logo }).eq("id", org());
+export const upsertOrg       = (o)      => supabase.from("organizations").update({ name: o.name, logo_path: o.logo, followup: o.followup }).eq("id", org());
 
 // Transactional / aggregate work via RPC.
 export const recordActivity  = (homeId, type) => supabase.rpc("record_door_activity", { home_id: homeId, atype: type });

@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { useStore, getState, setOrg } from "../../store";
+import { useStore, getState, setOrg, setFollowupSettings } from "../../store";
 import { useTheme, setTheme } from "../../theme.js";
 
 export default function Settings() {
   useStore();
   const theme = useTheme();
   const org = getState().org;
+  const fu = org.followup || {};
   const [name, setName] = useState(org.name);
   const [saved, setSaved] = useState(false);
 
@@ -59,6 +60,52 @@ export default function Settings() {
             <button className={"btn" + (theme === "dark" ? " primary" : "")} onClick={() => setTheme("dark")}>🌙 Dark</button>
           </div>
         </div>
+      </div>
+
+      <div className="card" style={{ marginTop: 14 }}>
+        <h3>🔔 Follow-up nudges</h3>
+        <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+          Set how your reps get reminded to follow up. When a rep captures a <b>phone number</b> on the
+          Street Sheet, Doorline nudges them to call back. These rules apply to your whole team.
+        </p>
+
+        <label className="row" style={{ gap: 8, marginBottom: 14, cursor: "pointer" }}>
+          <input type="checkbox" checked={fu.enabled !== false} onChange={(e) => setFollowupSettings({ enabled: e.target.checked })} />
+          <span>Follow-up nudges enabled</span>
+        </label>
+
+        <div className="grid-3 cards" style={{ gap: 12 }}>
+          <label className="field" style={{ margin: 0 }}>
+            <span>Nudge after (hours)</span>
+            <input className="input" type="number" min="1" max="336" value={fu.hours ?? 24}
+              disabled={fu.enabled === false}
+              onChange={(e) => setFollowupSettings({ hours: Math.max(1, Number(e.target.value) || 24) })} />
+          </label>
+          <label className="field" style={{ margin: 0 }}>
+            <span>Quiet hours start</span>
+            <input className="input" type="time" value={fu.quietStart || "21:00"} disabled={fu.enabled === false}
+              onChange={(e) => setFollowupSettings({ quietStart: e.target.value })} />
+          </label>
+          <label className="field" style={{ margin: 0 }}>
+            <span>Quiet hours end</span>
+            <input className="input" type="time" value={fu.quietEnd || "08:00"} disabled={fu.enabled === false}
+              onChange={(e) => setFollowupSettings({ quietEnd: e.target.value })} />
+          </label>
+        </div>
+
+        <div className="row" style={{ gap: 16, marginTop: 12 }}>
+          <label className="row" style={{ gap: 8, cursor: "pointer" }}>
+            <input type="checkbox" checked={fu.onPhone !== false} disabled={fu.enabled === false} onChange={(e) => setFollowupSettings({ onPhone: e.target.checked })} />
+            <span>When a phone number is added</span>
+          </label>
+          <label className="row" style={{ gap: 8, cursor: "pointer" }}>
+            <input type="checkbox" checked={fu.onCB !== false} disabled={fu.enabled === false} onChange={(e) => setFollowupSettings({ onCB: e.target.checked })} />
+            <span>At the rep's call-back time</span>
+          </label>
+        </div>
+        <p className="muted" style={{ fontSize: 12, marginTop: 12, marginBottom: 0 }}>
+          Reps see a 🔔 with the count in their top bar and a list of who to call. (In-app now; SMS/push to reps comes with the mobile app.)
+        </p>
       </div>
     </>
   );

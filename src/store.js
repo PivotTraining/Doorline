@@ -76,8 +76,8 @@ function seed() {
     }
   });
 
-  // company / org branding (logo is customizable by admins)
-  const org = { name: "Doorline", logo: null };
+  // company / org branding + manager-set follow-up/nudge rules
+  const org = { name: "Doorline", logo: null, followup: { enabled: true, hours: 24, onPhone: true, onCB: true, quietStart: "21:00", quietEnd: "08:00" } };
 
   // bulletin board — admins broadcast to the whole team
   const owner = users.find((u) => u.role === "owner");
@@ -114,16 +114,16 @@ function seed() {
   // street sheet — seed one rep's sheet so the grid/rollup is populated
   const day0 = new Date(now).toISOString().slice(0, 10);
   const r0 = reps[0];
-  const mkRow = (street, f = {}, customer = "", comments = "", cb = "") =>
-    ({ id: uid(), repId: r0.id, date: day0, street, nh: false, rl: false, dm: false, bid: false, d: false, ni: false, customer, comments, cb, ...f });
+  const mkRow = (street, f = {}, customer = "", comments = "", cb = "", phone = "") =>
+    ({ id: uid(), repId: r0.id, date: day0, street, nh: false, rl: false, dm: false, bid: false, d: false, ni: false, customer, comments, cb, phone, createdAt: now - 26 * 3600e3, done: false, snoozeUntil: 0, ...f });
   const streetRows = [
     mkRow("580 Noah Ave", { nh: true }),
     mkRow("576 Noah Ave", { nh: true }),
     mkRow("570 Noah Ave", { ni: true }, "", "Slammed door"),
-    mkRow("566 Noah Ave", { dm: true, bid: true }, "Sergio", "Got bill, PIPP"),
+    mkRow("566 Noah Ave", { dm: true, bid: true }, "Sergio", "Got bill, wants a call back", "", "(404) 555-0142"),
     mkRow("562 Noah Ave", { nh: true }),
     mkRow("540 Noah Ave", { dm: true, d: true }, "Balcony", "PIPP — closed"),
-    mkRow("509 Noah Ave", { rl: true }, "", "Come back later", "5:30"),
+    mkRow("509 Noah Ave", { rl: true }, "Maria", "Come back later", "5:30", "(404) 555-0188"),
   ];
 
   return { org, users, homes, deals, posts, territories, tracks, presence, streetRows, sessionId: null };
@@ -133,11 +133,12 @@ function seed() {
 function hydrate(s) {
   if (!s) return null;
   s.org = s.org || { name: "Doorline", logo: null };
+  s.org.followup = s.org.followup || { enabled: true, hours: 24, onPhone: true, onCB: true, quietStart: "21:00", quietEnd: "08:00" };
   s.posts = s.posts || [];
   s.territories = s.territories || [];
   s.tracks = s.tracks || {};
   s.presence = s.presence || {};
-  s.streetRows = s.streetRows || [];
+  s.streetRows = (s.streetRows || []).map((r) => ({ phone: "", done: false, snoozeUntil: 0, createdAt: Date.now(), ...r }));
   s.homes = (s.homes || []).map((h) => ({ activity: [], ...h }));
   return s;
 }
@@ -306,7 +307,7 @@ export function repAccountability(repId) {
 
 // ---------- street sheet ----------
 export function addStreetRow({ repId, date, street }) {
-  const r = { id: uid(), repId, date, street: street || "", nh: false, rl: false, dm: false, bid: false, d: false, ni: false, customer: "", comments: "", cb: "" };
+  const r = { id: uid(), repId, date, street: street || "", nh: false, rl: false, dm: false, bid: false, d: false, ni: false, customer: "", comments: "", cb: "", phone: "", createdAt: Date.now(), done: false, snoozeUntil: 0 };
   state.streetRows.push(r); emit(); push("street_rows", r); return r;
 }
 export function updateStreetRow(id, patch) {
@@ -314,6 +315,38 @@ export function updateStreetRow(id, patch) {
   Object.assign(r, patch); emit(); push("street_rows", r);
 }
 export function removeStreetRow(id) { state.streetRows = state.streetRows.filter((r) => r.id !== id); emit(); pushDel("street_rows", id); }
+
+// ---------- follow-up nudges ----------
+// Manager-set rules (org-level; applies to the team's reps).
+export function setFollowupSettings(patch) {
+  state.org.followup = { ...(state.org.followup || {}), ...patch };
+  emit(); push("organizations", state.org);
+}
+export function resolveNudge(rowId) { const r = state.streetRows.find((x) => x.id === rowId); if (r) { r.done = true; emit(); push("street_rows", r); } }
+export function snoozeNudge(rowId, ms) { const r = state.streetRows.find((x) => x.id === rowId); if (r) { r.snoozeUntil = Date.now() + ms; emit(); push("street_rows", r); } }
+
+// Follow-ups that are due for a rep right now, from the tracking sheet
+// (a captured phone, not yet closed/uninterested) and door call-backs.
+export function dueNudges(repId) {
+  const fu = state.org.followup || {};
+  if (fu.enabled === false) return [];
+  const now = Date.now();
+  const wait = (fu.hours ?? 24) * 3600e3;
+  const out = [];
+  if (fu.onPhone !== false) {
+    state.streetRows
+      .filter((r) => r.repId === repId && r.phone && !r.d && !r.ni && !r.done)
+      .forEach((r) => {
+        const due = Math.max((r.createdAt || now) + wait, r.snoozeUntil || 0);
+        if (now >= due) out.push({ id: r.id, source: "street", label: r.customer || r.street || "Door", sub: r.street, phone: r.phone, due });
+      });
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  state.homes
+    .filter((h) => h.repId === repId && ["callback", "appt"].includes(h.status) && h.phone && h.due && h.due <= today)
+    .forEach((h) => out.push({ id: h.id, source: "door", label: h.contact || h.addr, sub: h.addr, phone: h.phone, due: Date.parse(h.due) || now }));
+  return out.sort((a, b) => a.due - b.due);
+}
 
 // Tally the six columns (+ CB and total doors) for a set of rows.
 export function sheetTotals(rows) {
