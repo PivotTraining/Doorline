@@ -1,4 +1,4 @@
-import { useStore, getState } from "../../store";
+import { useStore, getState, updateDeal, PRODUCTS } from "../../store";
 
 export default function MyDeals({ user }) {
   useStore();
@@ -11,7 +11,7 @@ export default function MyDeals({ user }) {
       <div className="page-head">
         <div>
           <h1>My Deals</h1>
-          <p>Everything you've closed.</p>
+          <p>Everything you've closed — including “D” from your Street Sheet. Set the product and contract value here.</p>
         </div>
       </div>
 
@@ -22,17 +22,24 @@ export default function MyDeals({ user }) {
 
       <div className="card">
         {deals.length === 0 ? (
-          <p className="muted">No deals yet. Mark a door "Sold" to capture one.</p>
+          <p className="muted">No deals yet. Mark “D” on the Street Sheet or “Sold” on a door to capture one.</p>
         ) : (
           <table className="tbl">
-            <thead><tr><th>Customer</th><th>Product</th><th>Address</th><th style={{ textAlign: "right" }}>Value</th></tr></thead>
+            <thead><tr><th>Customer</th><th>Product</th><th>Address</th><th style={{ width: 150 }}>Value ($)</th></tr></thead>
             <tbody>
               {deals.map((d) => (
                 <tr key={d.id}>
-                  <td>{d.customer}</td>
-                  <td className="muted">{d.product}</td>
-                  <td className="muted">{d.addr}</td>
-                  <td style={{ textAlign: "right", color: "var(--green)", fontWeight: 600 }}>${(d.value || 0).toLocaleString()}</td>
+                  <td><input className="input" style={{ padding: "6px 8px" }} value={d.customer || ""} onChange={(e) => updateDeal(d.id, { customer: e.target.value })} /></td>
+                  <td>
+                    <select className="select" style={{ padding: "6px 8px" }} value={d.product || PRODUCTS[0]} onChange={(e) => updateDeal(d.id, { product: e.target.value })}>
+                      {PRODUCTS.map((p) => <option key={p}>{p}</option>)}
+                    </select>
+                  </td>
+                  <td className="muted">{d.addr || "—"}</td>
+                  <td>
+                    <input className="input" style={{ padding: "6px 8px" }} type="number" min="0" value={d.value || 0}
+                      onChange={(e) => updateDeal(d.id, { value: Math.max(0, Number(e.target.value) || 0) })} />
+                  </td>
                 </tr>
               ))}
             </tbody>

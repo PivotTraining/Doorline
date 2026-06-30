@@ -115,7 +115,7 @@ function seed() {
   const day0 = new Date(now).toISOString().slice(0, 10);
   const r0 = reps[0];
   const mkRow = (street, f = {}, customer = "", comments = "", cb = "", phone = "") =>
-    ({ id: uid(), repId: r0.id, date: day0, street, nh: false, rl: false, dm: false, bid: false, d: false, ni: false, customer, comments, cb, phone, createdAt: now - 26 * 3600e3, done: false, snoozeUntil: 0, ...f });
+    ({ id: uid(), repId: r0.id, date: day0, street, nh: false, rl: false, dm: false, bid: false, d: false, ni: false, customer, comments, cb, phone, createdAt: now - 26 * 3600e3, done: false, snoozeUntil: 0, dealId: null, ...f });
   const streetRows = [
     mkRow("580 Noah Ave", { nh: true }),
     mkRow("576 Noah Ave", { nh: true }),
@@ -124,9 +124,15 @@ function seed() {
     mkRow("562 Noah Ave", { nh: true }),
     mkRow("540 Noah Ave", { dm: true, d: true }, "Balcony", "PIPP — closed"),
     mkRow("509 Noah Ave", { rl: true }, "Maria", "Come back later", "5:30", "(404) 555-0188"),
-  ];
+  ].map((r, i) => ({ ...r, slot: i + 1 }));
 
-  return { org, users, homes, deals, posts, territories, tracks, presence, streetRows, sessionId: null };
+  // street-sheet "D" rows create a deal so My Deals reflects them
+  streetRows.filter((r) => r.d).forEach((r) => {
+    const dl = { id: uid(), repId: r.repId, homeId: null, customer: r.customer || "New customer", product: PRODUCTS[0], value: 12000, addr: r.street };
+    r.dealId = dl.id; deals.push(dl);
+  });
+
+  return { org, users, homes, deals, posts, territories, tracks, presence, streetRows, submittedDays: {}, sessionId: null };
 }
 
 // Fill in fields that older persisted state won't have (forward migration).
@@ -138,7 +144,8 @@ function hydrate(s) {
   s.territories = s.territories || [];
   s.tracks = s.tracks || {};
   s.presence = s.presence || {};
-  s.streetRows = (s.streetRows || []).map((r) => ({ phone: "", done: false, snoozeUntil: 0, createdAt: Date.now(), ...r }));
+  s.streetRows = (s.streetRows || []).map((r) => ({ phone: "", done: false, snoozeUntil: 0, dealId: null, createdAt: Date.now(), ...r }));
+  s.submittedDays = s.submittedDays || {};
   s.homes = (s.homes || []).map((h) => ({ activity: [], ...h }));
   return s;
 }
@@ -306,15 +313,56 @@ export function repAccountability(repId) {
 }
 
 // ---------- street sheet ----------
-export function addStreetRow({ repId, date, street }) {
-  const r = { id: uid(), repId, date, street: street || "", nh: false, rl: false, dm: false, bid: false, d: false, ni: false, customer: "", comments: "", cb: "", phone: "", createdAt: Date.now(), done: false, snoozeUntil: 0 };
-  state.streetRows.push(r); emit(); push("street_rows", r); return r;
+export function addStreetRow({ repId, date, ...init }) {
+  const r = { id: uid(), repId, date, street: "", nh: false, rl: false, dm: false, bid: false, d: false, ni: false, customer: "", comments: "", cb: "", phone: "", createdAt: Date.now(), done: false, snoozeUntil: 0, dealId: null, ...init };
+  state.streetRows.push(r);
+  if (r.d) linkStreetDeal(r); // created already marked sold
+  emit(); push("street_rows", r); return r;
+}
+// Marking "D" on a street row creates a deal (shows in My Deals); clearing it removes the deal.
+function linkStreetDeal(r) {
+  if (r.dealId) return;
+  const d = { id: uid(), repId: r.repId, homeId: null, customer: r.customer || "New customer", product: PRODUCTS[0], value: 0, addr: r.street || "" };
+  r.dealId = d.id; state.deals.push(d); push("deals", d);
+}
+function unlinkStreetDeal(r) {
+  if (!r.dealId) return;
+  const id = r.dealId; r.dealId = null;
+  state.deals = state.deals.filter((x) => x.id !== id); pushDel("deals", id);
 }
 export function updateStreetRow(id, patch) {
   const r = state.streetRows.find((x) => x.id === id); if (!r) return;
-  Object.assign(r, patch); emit(); push("street_rows", r);
+  if (patch.d === true && !r.dealId) { Object.assign(r, patch); linkStreetDeal(r); }
+  else if (patch.d === false && r.dealId) { Object.assign(r, patch); unlinkStreetDeal(r); }
+  else Object.assign(r, patch);
+  // keep the linked deal's customer in sync
+  if (r.dealId && patch.customer != null) { const d = state.deals.find((x) => x.id === r.dealId); if (d) { d.customer = patch.customer || "New customer"; push("deals", d); } }
+  emit(); push("street_rows", r);
 }
-export function removeStreetRow(id) { state.streetRows = state.streetRows.filter((r) => r.id !== id); emit(); pushDel("street_rows", id); }
+export function updateDeal(id, patch) { const d = state.deals.find((x) => x.id === id); if (d) { Object.assign(d, patch); emit(); push("deals", d); } }
+
+// ---------- daily sheet lifecycle ----------
+const dayKey = (repId, date) => repId + "|" + date;
+export function submitDay(repId, date) { state.submittedDays[dayKey(repId, date)] = true; emit(); }
+export function reopenDay(repId, date) { delete state.submittedDays[dayKey(repId, date)]; emit(); }
+export function isDaySubmitted(repId, date) { return !!state.submittedDays[dayKey(repId, date)]; }
+
+// Combined stats for My Day: map doors + street-sheet work.
+export function dayStats(repId) {
+  const s = repStats(repId);
+  const rows = state.streetRows.filter((r) => r.repId === repId);
+  const worked = rows.filter((r) => r.nh || r.rl || r.dm || r.bid || r.d || r.ni || r.street).length;
+  const dm = rows.filter((r) => r.dm).length;
+  const sold = rows.filter((r) => r.d).length;
+  const contacts = s.contacts + dm;
+  const closes = s.closes + sold;
+  return { knocks: s.knocks + worked, contacts, appts: s.appts, closes, rate: contacts ? Math.round((closes / contacts) * 100) : 0 };
+}
+export function removeStreetRow(id) {
+  const r = state.streetRows.find((x) => x.id === id);
+  if (r && r.dealId) { const did = r.dealId; state.deals = state.deals.filter((x) => x.id !== did); pushDel("deals", did); }
+  state.streetRows = state.streetRows.filter((x) => x.id !== id); emit(); pushDel("street_rows", id);
+}
 
 // ---------- follow-up nudges ----------
 // Manager-set rules (org-level; applies to the team's reps).

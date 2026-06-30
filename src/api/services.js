@@ -32,7 +32,8 @@ export async function loadAll() {
 }
 
 export const upsertHome      = (h)      => supabase.from("homes").upsert(M.homeToRow(h, org()));
-export const insertDeal      = (d)      => supabase.from("deals").insert(M.dealToRow(d, org()));
+export const upsertDeal      = (d)      => supabase.from("deals").upsert(M.dealToRow(d, org()));
+export const deleteDeal      = (id)     => supabase.from("deals").delete().eq("id", id);
 export const upsertProfile   = (u)      => supabase.from("profiles").upsert(M.profileToRow(u, org()));
 export const deleteProfile   = (id)     => supabase.from("profiles").delete().eq("id", id);
 export const upsertPost      = (p)      => supabase.from("posts").upsert(M.postToRow(p, org()));

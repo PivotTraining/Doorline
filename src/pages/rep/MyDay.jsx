@@ -1,9 +1,9 @@
-import { useStore, getState, repStats, DISPOS } from "../../store";
+import { useStore, getState, dayStats, DISPOS } from "../../store";
 
 export default function MyDay({ user }) {
   useStore();
   const state = getState();
-  const s = repStats(user.id);
+  const s = dayStats(user.id);
   const mine = state.homes.filter((h) => h.repId === user.id);
   const today = new Date().toISOString().slice(0, 10);
   const dueToday = mine.filter((h) => h.due && h.due <= today && ["callback", "appt"].includes(h.status));

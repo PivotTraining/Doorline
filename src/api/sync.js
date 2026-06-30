@@ -14,7 +14,7 @@ const safe = (p) => { try { Promise.resolve(p).catch(() => {}); } catch { /* ign
 export function up(table, e) {
   if (!live() || !e) return;
   if (table === "homes") safe(S.upsertHome(e));
-  else if (table === "deals") safe(S.insertDeal(e));
+  else if (table === "deals") safe(S.upsertDeal(e));
   else if (table === "profiles") safe(S.upsertProfile(e));
   else if (table === "posts") safe(S.upsertPost(e));
   else if (table === "territories") safe(S.upsertTerritory(e));
@@ -27,6 +27,7 @@ export function del(table, id) {
   else if (table === "posts") safe(S.deletePost(id));
   else if (table === "territories") safe(S.deleteTerritory(id));
   else if (table === "street_rows") safe(S.deleteStreetRow(id));
+  else if (table === "deals") safe(S.deleteDeal(id));
 }
 export const activity = (homeId, type) => { if (live()) safe(S.recordActivity(homeId, type)); };
 export const consent = (granted) => { if (live()) safe(S.setConsentRpc(granted)); };
