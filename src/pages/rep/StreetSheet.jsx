@@ -99,8 +99,8 @@ export default function StreetSheet({ user }) {
         <div className="card stat"><div className="n">{t.ni}</div><div className="l">Not interested</div></div>
       </div>
 
-      <div className="card" style={{ overflowX: "auto", opacity: submitted ? 0.85 : 1 }}>
-        <table className="tbl" style={{ minWidth: 820 }}>
+      <div className="card sheet-scroll" style={{ opacity: submitted ? 0.85 : 1, padding: 0 }}>
+        <table className="tbl sheet-tbl" style={{ minWidth: 820 }}>
           <thead>
             <tr>
               <th style={{ width: 34 }}>#</th>
