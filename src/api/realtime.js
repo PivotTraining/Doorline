@@ -2,7 +2,7 @@
 // client is allowed to receive, so this is safe to wire broadly.
 import { supabase } from "../supabaseClient";
 
-const TABLES = ["homes", "deals", "posts", "location_tracks"];
+const TABLES = ["homes", "deals", "posts", "location_tracks", "street_rows", "territories"];
 
 export function subscribeOrg(orgId, onChange) {
   const ch = supabase.channel(`org:${orgId}`);

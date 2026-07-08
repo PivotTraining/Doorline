@@ -172,6 +172,24 @@ if (typeof window !== "undefined") {
   const flush = () => { if (persistScheduled) persistNow(); };
   window.addEventListener("pagehide", flush);
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flush(); });
+
+  // Cross-tab sync (demo/local-storage mode): the browser only fires
+  // "storage" in *other* tabs, never the one that wrote — so when a manager
+  // and a rep have the app open in two tabs on the same machine, the
+  // manager's tab picks up the rep's changes without a manual reload.
+  // Skipped if this tab has its own unsaved edits pending, so we never
+  // clobber local work with a stale snapshot from another tab.
+  window.addEventListener("storage", (e) => {
+    if (e.key !== KEY || e.newValue == null || persistScheduled) return;
+    try {
+      const incoming = hydrate(JSON.parse(e.newValue));
+      // Adopt the other tab's data, but never its session — each tab is
+      // signed in independently (its own demo user or its own Supabase
+      // Auth session), so swapping sessionId here would log this tab in/out
+      // as whoever last wrote from the other tab.
+      if (incoming) { state = { ...incoming, sessionId: state.sessionId }; version++; listeners.forEach((l) => l()); }
+    } catch { /* ignore corrupt payloads */ }
+  });
 }
 
 function emit() { version++; schedulePersist(); listeners.forEach((l) => l()); }
@@ -430,23 +448,29 @@ export function loadSnapshot(snap, sessionId) {
   state.presence = state.presence || {};
   emit();
 }
-// Merge a Realtime change into local state.
+// Merge a Realtime change into local state. Runs for every subscribed table
+// (see src/api/realtime.js) so any manager/rep screen reading that slice of
+// state repaints live — no manual reload needed.
 export function applyRemote(table, payload) {
   const row = payload.new, old = payload.old, ev = payload.eventType;
+  const upsert = (list, item, unshift) => {
+    const i = list.findIndex((x) => x.id === item.id);
+    if (i >= 0) list[i] = { ...list[i], ...item }; else unshift ? list.unshift(item) : list.push(item);
+  };
   if (table === "homes" && row) {
-    const h = M.homeFromRow(row);
-    const i = state.homes.findIndex((x) => x.id === h.id);
-    if (i >= 0) state.homes[i] = { ...state.homes[i], ...h }; else state.homes.push(h);
-  } else if (table === "deals" && row) {
-    const d = M.dealFromRow(row);
-    if (!state.deals.some((x) => x.id === d.id)) state.deals.push(d);
+    upsert(state.homes, M.homeFromRow(row));
+  } else if (table === "deals") {
+    if (ev === "DELETE") state.deals = state.deals.filter((d) => d.id !== old?.id);
+    else if (row) upsert(state.deals, M.dealFromRow(row));
   } else if (table === "posts") {
     if (ev === "DELETE") state.posts = state.posts.filter((p) => p.id !== old?.id);
-    else if (row) {
-      const p = M.postFromRow(row);
-      const i = state.posts.findIndex((x) => x.id === p.id);
-      if (i >= 0) state.posts[i] = p; else state.posts.unshift(p);
-    }
+    else if (row) upsert(state.posts, M.postFromRow(row), true);
+  } else if (table === "street_rows") {
+    if (ev === "DELETE") state.streetRows = state.streetRows.filter((r) => r.id !== old?.id);
+    else if (row) upsert(state.streetRows, M.streetRowFromRow(row));
+  } else if (table === "territories") {
+    if (ev === "DELETE") state.territories = state.territories.filter((t) => t.id !== old?.id);
+    else if (row) upsert(state.territories, M.territoryFromRow(row));
   }
   emit();
 }
