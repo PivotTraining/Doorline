@@ -7,6 +7,7 @@ import { createCache } from "../src/api/cache.js";
 import { createLocationQueue } from "../src/api/locationQueue.js";
 import { pointInPolygon } from "../src/lib/geo.js";
 import { toCSV } from "../src/lib/csv.js";
+import { localDay } from "../src/lib/date.js";
 
 test("home round-trips through row mapping", () => {
   const h = { id: "h1", repId: "r1", addr: "1 Maple", lat: 33.7, lng: -84.3, status: "appt",
@@ -22,6 +23,27 @@ test("deal value converts dollars <-> cents", () => {
   const row = M.dealToRow({ id: "d1", repId: "r1", homeId: "h1", customer: "C", product: "Solar", value: 12000 }, "org1");
   assert.equal(row.value_cents, 1200000);
   assert.equal(M.dealFromRow(row).value, 12000);
+});
+
+test("deal timestamp round-trips through created_at (powers the weekly My Deals view)", () => {
+  const ts = Date.parse("2026-06-01T12:00:00Z");
+  const row = M.dealToRow({ id: "d1", repId: "r1", homeId: null, customer: "C", product: "Solar", value: 100, ts }, "org1");
+  assert.equal(row.created_at, new Date(ts).toISOString());
+  assert.equal(M.dealFromRow(row).ts, ts);
+});
+
+test("localDay uses the LOCAL calendar date, unlike toISOString (the timezone bug this fixes)", () => {
+  const prevTZ = process.env.TZ;
+  process.env.TZ = "America/New_York"; // UTC-4/-5
+  try {
+    // Jan 1 02:00 UTC is still Dec 31 evening in US Eastern — a rep working
+    // that evening should have their door land on Dec 31, not Jan 1.
+    const d = new Date(Date.UTC(2026, 0, 1, 2, 0, 0));
+    assert.equal(d.toISOString().slice(0, 10), "2026-01-01"); // the buggy UTC-based value
+    assert.equal(localDay(d), "2025-12-31"); // the correct local-date value
+  } finally {
+    process.env.TZ = prevTZ;
+  }
 });
 
 test("territory polygon round-trips (lat/lng order + closed ring)", () => {

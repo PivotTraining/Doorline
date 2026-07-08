@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useStore, getState, addTerritory, updateTerritory, removeTerritory, updateUser } from "../../store";
 import TerritoryMap from "../../components/TerritoryMap.jsx";
+import { localDay } from "../../lib/date.js";
 
 const COLORS = ["#2e90fa", "#16a34a", "#f59e0b", "#a855f7", "#ef4444", "#14b8a6"];
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localDay();
 const initials = (name) => (name || "?").split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 
 export default function Territories() {

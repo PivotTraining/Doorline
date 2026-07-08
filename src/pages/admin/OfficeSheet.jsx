@@ -1,9 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useStore, getState, SHEET_COLS, officeRollup } from "../../store";
 import { downloadCSV, stamp } from "../../lib/csv.js";
+import { localDay } from "../../lib/date.js";
+import { DEMO } from "../../supabaseClient";
+import { initLive } from "../../api/bootstrap";
 import Modal from "../../components/Modal.jsx";
+import PullToRefresh from "../../components/PullToRefresh.jsx";
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localDay();
 const fmtDate = (d) => new Date(d + "T00:00:00").toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
 
 export default function OfficeSheet() {
@@ -12,14 +16,40 @@ export default function OfficeSheet() {
   const [date, setDate] = useState(today());
   const [scope, setScope] = useState("day"); // day | all
   const [openRep, setOpenRep] = useState(null); // rep being drilled into
+  const [refreshing, setRefreshing] = useState(false);
+  const autoToday = useRef(true); // false once the manager explicitly picks a different date
   const { perRep, grand } = officeRollup(scope === "day" ? date : null);
+
+  // Keep the "single day" view pinned to the real current day even if this
+  // page is left open across midnight — otherwise it silently keeps showing
+  // yesterday until someone thinks to reload.
+  useEffect(() => {
+    const check = () => { if (autoToday.current) setDate((d) => (d === today() ? d : today())); };
+    const id = setInterval(check, 60000);
+    document.addEventListener("visibilitychange", check);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", check); };
+  }, []);
+
+  const onDateChange = (e) => { autoToday.current = false; setDate(e.target.value); };
+
+  const doRefresh = async () => {
+    setRefreshing(true);
+    try {
+      if (!DEMO) await initLive(); // re-pull a fresh snapshot + resubscribe realtime
+      else await new Promise((r) => setTimeout(r, 300));
+      autoToday.current = true;
+      setDate(today());
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const exportCSV = () => downloadCSV(`office-${scope === "day" ? date : "all"}.csv`, perRep.map(({ rep, ...t }) => ({
     Rep: rep.name, Doors: t.doors, NH: t.nh, RL: t.rl, DM: t.dm, "B/ID": t.bid, D: t.d, NI: t.ni, CB: t.cb,
   })));
 
   return (
-    <>
+    <PullToRefresh onRefresh={doRefresh}>
       <div className="page-head">
         <div>
           <h1>Office Sheet</h1>
@@ -30,7 +60,10 @@ export default function OfficeSheet() {
             <option value="day">Single day</option>
             <option value="all">All time</option>
           </select>
-          {scope === "day" && <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ width: "auto" }} />}
+          {scope === "day" && <input className="input" type="date" value={date} onChange={onDateChange} style={{ width: "auto" }} />}
+          <button className="btn" onClick={doRefresh} disabled={refreshing} title="Pull down anywhere on this page to refresh too">
+            {refreshing ? "↻ Refreshing…" : "↻ Refresh"}
+          </button>
           <button className="btn" onClick={exportCSV}>⤓ Export CSV</button>
         </div>
       </div>
@@ -86,7 +119,7 @@ export default function OfficeSheet() {
           onClose={() => setOpenRep(null)}
         />
       )}
-    </>
+    </PullToRefresh>
   );
 }
 

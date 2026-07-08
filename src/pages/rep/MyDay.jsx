@@ -1,11 +1,12 @@
 import { useStore, getState, dayStats, DISPOS } from "../../store";
+import { localDay } from "../../lib/date.js";
 
 export default function MyDay({ user }) {
   useStore();
   const state = getState();
   const s = dayStats(user.id);
   const mine = state.homes.filter((h) => h.repId === user.id);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDay();
   const dueToday = mine.filter((h) => h.due && h.due <= today && ["callback", "appt"].includes(h.status));
   const recent = mine.filter((h) => h.status !== "untouched").slice(-6).reverse();
   const hour = new Date().getHours();

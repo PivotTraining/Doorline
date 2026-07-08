@@ -1,15 +1,21 @@
 import { useStore, getState } from "../../store";
 import { downloadCSV, stamp } from "../../lib/csv.js";
 
+const WEEK_MS = 7 * 86400e3;
+
 export default function Deals() {
   useStore();
   const state = getState();
   const name = (id) => state.users.find((u) => u.id === id)?.name || "—";
   const exportCSV = () => downloadCSV(`deals-${stamp()}.csv`, state.deals.map((d) => ({
     Customer: d.customer, Rep: name(d.repId), Product: d.product, Address: d.addr || "", Value: d.value || 0,
+    Date: d.ts ? new Date(d.ts).toISOString().slice(0, 10) : "",
   })));
   const total = state.deals.reduce((a, d) => a + (d.value || 0), 0);
   const avg = state.deals.length ? Math.round(total / state.deals.length) : 0;
+  const weekCutoff = Date.now() - WEEK_MS;
+  const weekDeals = state.deals.filter((d) => (d.ts || 0) >= weekCutoff);
+  const weekTotal = weekDeals.reduce((a, d) => a + (d.value || 0), 0);
 
   // group by product
   const byProduct = {};
@@ -25,11 +31,13 @@ export default function Deals() {
         <button className="btn" onClick={exportCSV} disabled={state.deals.length === 0}>⤓ Export CSV</button>
       </div>
 
-      <div className="cards grid-3" style={{ marginBottom: 18 }}>
-        <div className="card stat"><div className="n">{state.deals.length}</div><div className="l">Deals</div></div>
-        <div className="card stat"><div className="n">${total.toLocaleString()}</div><div className="l">Total value</div></div>
-        <div className="card stat"><div className="n">${avg.toLocaleString()}</div><div className="l">Avg deal size</div></div>
+      <div className="cards grid-4" style={{ marginBottom: 18 }}>
+        <div className="card stat"><div className="n">{weekDeals.length}</div><div className="l">This week</div></div>
+        <div className="card stat"><div className="n" style={{ color: "var(--green)" }}>${weekTotal.toLocaleString()}</div><div className="l">This week's value</div></div>
+        <div className="card stat"><div className="n">{state.deals.length}</div><div className="l">All-time deals</div></div>
+        <div className="card stat"><div className="n">${total.toLocaleString()}</div><div className="l">All-time value</div></div>
       </div>
+      <p className="muted" style={{ fontSize: 12, marginTop: -10, marginBottom: 18 }}>Avg deal size: ${avg.toLocaleString()}</p>
 
       <div className="cards grid-2">
         <div className="card">

@@ -9,6 +9,9 @@ import { useSyncExternalStore, useReducer, useRef, useEffect } from "react";
 import { supabase, DEMO } from "./supabaseClient";
 import * as sync from "./api/sync";
 import * as M from "./api/mappers";
+import { localDay } from "./lib/date.js";
+
+export { localDay };
 
 const KEY = "doorline_state_v1";
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : "id" + Math.random().toString(36).slice(2));
@@ -46,6 +49,7 @@ export const SHEET_COLS = [
 
 // ---------- seed (demo) ----------
 function seed() {
+  const now = Date.now();
   const C = [33.749, -84.388]; // Atlanta
   const mk = (name, email, role, plan, terr) => ({ id: uid(), name, email, pass: role === "rep" ? "rep" : role === "viewer" ? "view" : "admin", role, status: "active", plan, territory: terr });
   const users = [
@@ -70,7 +74,7 @@ function seed() {
       homes.push(h);
       if (st === "sold") {
         const val = 8000 + Math.floor(Math.random() * 20) * 1000;
-        const d = { id: uid(), repId: r.id, homeId: h.id, customer: "Customer " + (deals.length + 1), product: PRODUCTS[0], value: val, addr: h.addr };
+        const d = { id: uid(), repId: r.id, homeId: h.id, customer: "Customer " + (deals.length + 1), product: PRODUCTS[0], value: val, addr: h.addr, ts: now - Math.floor(Math.random() * 14) * 86400e3 };
         h.deal = d; deals.push(d);
       }
     }
@@ -81,7 +85,6 @@ function seed() {
 
   // bulletin board — admins broadcast to the whole team
   const owner = users.find((u) => u.role === "owner");
-  const now = Date.now();
   const posts = [
     { id: uid(), authorId: owner.id, authorName: owner.name, title: "Welcome to the team 👋",
       body: "Log every door on the map — knock, pitch, set follow-ups. Check this board for daily targets and shout-outs.",
@@ -93,8 +96,8 @@ function seed() {
   const tColors = ["#2e90fa", "#16a34a", "#f59e0b", "#a855f7"];
   const territories = reps.map((r, i) => ({
     id: uid(), name: r.territory + " District", color: tColors[i % tColors.length],
-    assignedTo: r.id, start: new Date(now).toISOString().slice(0, 10),
-    end: new Date(now + 5 * day).toISOString().slice(0, 10), notes: "",
+    assignedTo: r.id, start: localDay(new Date(now)),
+    end: localDay(new Date(now + 5 * day)), notes: "",
   }));
 
   // GPS breadcrumb trails + presence (seeded so the path view is populated in demo)
@@ -112,7 +115,7 @@ function seed() {
   });
 
   // street sheet — seed one rep's sheet so the grid/rollup is populated
-  const day0 = new Date(now).toISOString().slice(0, 10);
+  const day0 = localDay(new Date(now));
   const r0 = reps[0];
   const mkRow = (street, f = {}, customer = "", comments = "", cb = "", phone = "") =>
     ({ id: uid(), repId: r0.id, date: day0, street, nh: false, rl: false, dm: false, bid: false, d: false, ni: false, customer, comments, cb, phone, createdAt: now - 26 * 3600e3, done: false, snoozeUntil: 0, dealId: null, ...f });
@@ -128,7 +131,7 @@ function seed() {
 
   // street-sheet "D" rows create a deal so My Deals reflects them
   streetRows.filter((r) => r.d).forEach((r) => {
-    const dl = { id: uid(), repId: r.repId, homeId: null, customer: r.customer || "New customer", product: PRODUCTS[0], value: 12000, addr: r.street };
+    const dl = { id: uid(), repId: r.repId, homeId: null, customer: r.customer || "New customer", product: PRODUCTS[0], value: 12000, addr: r.street, ts: now };
     r.dealId = dl.id; deals.push(dl);
   });
 
@@ -147,6 +150,7 @@ function hydrate(s) {
   s.streetRows = (s.streetRows || []).map((r) => ({ phone: "", done: false, snoozeUntil: 0, dealId: null, createdAt: Date.now(), ...r }));
   s.submittedDays = s.submittedDays || {};
   s.homes = (s.homes || []).map((h) => ({ activity: [], ...h }));
+  s.deals = (s.deals || []).map((d) => ({ ts: Date.now(), ...d }));
   return s;
 }
 
@@ -269,7 +273,7 @@ export function setDoor(id, fields) {
   const h = state.homes.find(x => x.id === id); if (!h) return;
   Object.assign(h, fields);
   if (fields.status === "sold" && fields.deal) {
-    const d = { id: uid(), repId: h.repId, homeId: h.id, customer: fields.deal.customer || "New customer", product: fields.deal.product, value: fields.deal.value || 0, addr: h.addr };
+    const d = { id: uid(), repId: h.repId, homeId: h.id, customer: fields.deal.customer || "New customer", product: fields.deal.product, value: fields.deal.value || 0, addr: h.addr, ts: Date.now() };
     h.deal = d; state.deals.push(d); push("deals", d);
   }
   emit(); push("homes", h);
@@ -340,7 +344,7 @@ export function addStreetRow({ repId, date, ...init }) {
 // Marking "D" on a street row creates a deal (shows in My Deals); clearing it removes the deal.
 function linkStreetDeal(r) {
   if (r.dealId) return;
-  const d = { id: uid(), repId: r.repId, homeId: null, customer: r.customer || "New customer", product: PRODUCTS[0], value: 0, addr: r.street || "" };
+  const d = { id: uid(), repId: r.repId, homeId: null, customer: r.customer || "New customer", product: PRODUCTS[0], value: 0, addr: r.street || "", ts: Date.now() };
   r.dealId = d.id; state.deals.push(d); push("deals", d);
 }
 function unlinkStreetDeal(r) {
@@ -407,9 +411,9 @@ export function dueNudges(repId) {
         if (now >= due) out.push({ id: r.id, source: "street", label: r.customer || r.street || "Door", sub: r.street, phone: r.phone, due });
       });
   }
-  const today = new Date().toISOString().slice(0, 10);
+  const todayLocal = localDay();
   state.homes
-    .filter((h) => h.repId === repId && ["callback", "appt"].includes(h.status) && h.phone && h.due && h.due <= today)
+    .filter((h) => h.repId === repId && ["callback", "appt"].includes(h.status) && h.phone && h.due && h.due <= todayLocal)
     .forEach((h) => out.push({ id: h.id, source: "door", label: h.contact || h.addr, sub: h.addr, phone: h.phone, due: Date.parse(h.due) || now }));
   return out.sort((a, b) => a.due - b.due);
 }

@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useStore, getState, DISPOS } from "../../store";
 import DoorEditor from "../../components/DoorEditor.jsx";
+import { localDay } from "../../lib/date.js";
 
 export default function FollowUps({ user }) {
   useStore();
   const state = getState();
   const [edit, setEdit] = useState(null);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDay();
 
   const items = state.homes
     .filter((h) => h.repId === user.id && ["callback", "appt"].includes(h.status))

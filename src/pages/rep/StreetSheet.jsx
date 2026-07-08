@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect, memo } from "react";
 import { useStore, getState, SHEET_COLS, addStreetRow, updateStreetRow, removeStreetRow, sheetTotals, submitDay, reopenDay, isDaySubmitted } from "../../store";
+import { localDay } from "../../lib/date.js";
 
 const SLOTS = 100;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localDay();
 const cellStyle = { padding: "4px 6px", textAlign: "center" };
 const pad = { padding: "6px 8px" };
 const BLANK = { street: "", customer: "", phone: "", comments: "", cb: "" };

@@ -1,4 +1,6 @@
 // CSV export helpers (pure toCSV is unit-tested).
+import { localDay } from "./date.js";
+
 export function toCSV(rows) {
   if (!rows || rows.length === 0) return "";
   const headers = Object.keys(rows[0]);
@@ -21,4 +23,4 @@ export function downloadCSV(filename, rows) {
   URL.revokeObjectURL(url);
 }
 
-export const stamp = () => new Date().toISOString().slice(0, 10);
+export const stamp = () => localDay();

@@ -176,6 +176,14 @@ label.field > span { display: block; font-size: 13px; color: var(--muted); margi
 }
 .sheet-row-blank { opacity: 0.88; }
 
+/* ---------- pull-to-refresh ---------- */
+.pull-indicator {
+  position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 60;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 999px;
+  padding: 7px 16px; font-size: 13px; font-weight: 600; box-shadow: var(--shadow);
+  transition: opacity .15s;
+}
+
 /* ---------- table ---------- */
 table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 table.tbl th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; padding: 10px 12px; border-bottom: 1px solid var(--border); }
