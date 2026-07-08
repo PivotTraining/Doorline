@@ -182,6 +182,10 @@ table.tbl th { text-align: left; color: var(--muted); font-weight: 600; font-siz
 table.tbl td { padding: 11px 12px; border-bottom: 1px solid var(--border); }
 table.tbl tr:hover td { background: var(--panel-2); }
 table.tbl tfoot td { border-bottom: 0; }
+tr.rep-row { cursor: pointer; }
+tr.rep-row:hover td { background: var(--brand-soft); }
+.rep-link { color: var(--brand); font-weight: 650; }
+tr.rep-row:hover .rep-link { text-decoration: underline; }
 
 /* ---------- pills / badges ---------- */
 .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid var(--border); background: var(--panel-2); }
