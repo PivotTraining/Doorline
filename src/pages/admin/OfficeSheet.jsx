@@ -130,8 +130,15 @@ function RepDetail({ rep, rows, scope, date, onClose }) {
   sorted.forEach((r) => { (byDate[r.date] = byDate[r.date] || []).push(r); });
   const dates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
 
+  const exportCSV = () => downloadCSV(`${rep.name.replace(/\s+/g, "-")}-doors-${scope === "day" ? date : "all"}.csv`, sorted.map((r) => ({
+    Date: r.date, Slot: r.slot ?? "", Street: r.street || "",
+    ...Object.fromEntries(SHEET_COLS.map((c) => [c.lab, r[c.key] ? "Y" : ""])),
+    Customer: r.customer || "", Phone: r.phone || "", CB: r.cb || "", Notes: r.comments || "",
+  })));
+
   return (
-    <Modal title={`${rep.name} · ${scope === "day" ? fmtDate(date) : "All doors"}`} onClose={onClose} width={640}>
+    <Modal title={`${rep.name} · ${scope === "day" ? fmtDate(date) : "All doors"}`} onClose={onClose} width={640}
+      footer={rows.length > 0 ? <button className="btn" onClick={exportCSV}>⤓ Download CSV</button> : undefined}>
       {rows.length === 0 ? (
         <p className="muted" style={{ margin: 0 }}>No doors logged{scope === "day" ? " on this date." : " yet."}</p>
       ) : (

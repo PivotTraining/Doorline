@@ -49,10 +49,12 @@ export const territoryFromRow = (r) => ({
 export const profileToRow = (u, orgId) => ({
   id: u.id, org_id: orgId, full_name: u.name, email: u.email,
   role: u.role, status: u.status, territory: u.territory, seat_price_cents: u.plan || 0,
+  timezone: u.timezone || null, home_zip: u.homeZip || null, home_lat: u.homeLat ?? null, home_lng: u.homeLng ?? null,
 });
 export const profileFromRow = (r) => ({
   id: r.id, name: r.full_name, email: r.email, role: r.role, status: r.status,
   territory: r.territory || "—", plan: r.seat_price_cents || 0,
+  timezone: r.timezone || null, homeZip: r.home_zip || null, homeLat: r.home_lat ?? null, homeLng: r.home_lng ?? null,
 });
 
 export const streetRowToRow = (r, orgId) => ({

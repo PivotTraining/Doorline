@@ -1,16 +1,20 @@
-import { useEffect, useRef, useState } from "react";
-import { useStore, getState, setConsent, startSession, endSession, addBreadcrumb } from "../store";
+import { useEffect, useRef } from "react";
+import { useStore, getState, setConsent, startSession, endSession, addBreadcrumb, logout, mapDefaultCenter, US_CENTER } from "../store";
 import Modal from "./Modal.jsx";
 
-// Records a rep's route while they're signed in. Asks consent once.
-// Uses real device GPS when granted/available, and falls back to a simulated
-// walk so the path is visible in the browser demo. Stops on sign-out.
+// Records a rep's route while they're signed in. Location sharing is a
+// REQUIRED condition of using the field app (every worker must allow it),
+// not an optional toggle — so this re-prompts whenever consent isn't
+// currently granted, and the only ways forward are "Allow tracking" or
+// signing out. Uses real device GPS when granted/available, and falls
+// back to a simulated walk so the path is visible in the browser demo.
+// Stops the moment the rep signs out.
 export default function RepTracker({ user }) {
   useStore();
   const repId = user.id;
   const presence = getState().presence[repId] || {};
-  const [ask, setAsk] = useState(presence.consent === undefined);
   const granted = presence.consent === "granted";
+  const mustAsk = !granted; // covers never-asked AND previously-declined
   const watchRef = useRef(null);
   const simRef = useRef(null);
   const lastRef = useRef(0);
@@ -37,7 +41,8 @@ export default function RepTracker({ user }) {
 
     // Simulated movement fallback (only while real GPS isn't flowing).
     const t = getState().tracks[repId] || [];
-    let [la, ln] = t.length ? [t[t.length - 1].lat, t[t.length - 1].lng] : [33.749, -84.388];
+    const start = mapDefaultCenter(repId) || US_CENTER;
+    let [la, ln] = t.length ? [t[t.length - 1].lat, t[t.length - 1].lng] : start;
     simRef.current = setInterval(() => {
       if (gotReal) return;
       la += (Math.random() - 0.5) * 0.0014;
@@ -52,26 +57,27 @@ export default function RepTracker({ user }) {
     };
   }, [granted, repId]);
 
-  if (!ask) return null;
+  if (!mustAsk) return null;
   return (
     <Modal
-      title="📍 Share your route while you work?"
-      onClose={() => { setConsent(repId, "denied"); setAsk(false); }}
+      title="📍 Location sharing required"
+      onClose={() => {}} // not dismissible — allow or sign out, no silent skip
       footer={
         <>
-          <button className="btn ghost" onClick={() => { setConsent(repId, "denied"); setAsk(false); }}>Not now</button>
-          <button className="btn primary" onClick={() => { setConsent(repId, "granted"); setAsk(false); }}>Allow tracking</button>
+          <button className="btn ghost" onClick={logout}>Sign out instead</button>
+          <button className="btn primary" onClick={() => setConsent(repId, "granted")}>Allow tracking</button>
         </>
       }
     >
       <p style={{ marginTop: 0 }}>
-        While you're signed in, Doorline records the route you cover so your manager can credit your
-        effort and see the ground you worked — even on doors you didn't get to log.
+        Your employer requires location sharing to use the field app. While you're signed in,
+        Doorline records the route you cover — so your manager can credit your effort, see the
+        ground you worked (even on doors you didn't log), and confirm you're in your assigned
+        territory.
       </p>
       <ul className="muted" style={{ fontSize: 13, paddingLeft: 18, marginBottom: 0 }}>
-        <li>Runs only while you're signed in.</li>
-        <li>Stops the moment you sign out.</li>
-        <li>You can turn it off anytime in your Profile.</li>
+        <li>Runs only while you're signed in — stops the instant you sign out.</li>
+        <li>Required to continue as a field rep; you can sign out instead if you'd rather not.</li>
       </ul>
     </Modal>
   );

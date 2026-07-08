@@ -7,7 +7,7 @@ import { createCache } from "../src/api/cache.js";
 import { createLocationQueue } from "../src/api/locationQueue.js";
 import { pointInPolygon } from "../src/lib/geo.js";
 import { toCSV } from "../src/lib/csv.js";
-import { localDay } from "../src/lib/date.js";
+import { localDay, localDayInTZ } from "../src/lib/date.js";
 
 test("home round-trips through row mapping", () => {
   const h = { id: "h1", repId: "r1", addr: "1 Maple", lat: 33.7, lng: -84.3, status: "appt",
@@ -44,6 +44,20 @@ test("localDay uses the LOCAL calendar date, unlike toISOString (the timezone bu
   } finally {
     process.env.TZ = prevTZ;
   }
+});
+
+test("localDayInTZ resolves a REP'S OWN stored timezone, independent of the viewer/server's own", () => {
+  // The same instant — Jan 1 02:00 UTC — is already Jan 1 in Hawaii-Aleutian
+  // (UTC-10, still before midnight) but still Dec 31 in Eastern. A manager in
+  // one timezone checking a rep's sheet must see THAT REP'S day, not their own.
+  const instant = new Date(Date.UTC(2026, 0, 1, 2, 0, 0));
+  assert.equal(localDayInTZ("America/New_York", instant), "2025-12-31");
+  assert.equal(localDayInTZ("Pacific/Honolulu", instant), "2025-12-31");
+  assert.equal(localDayInTZ("Europe/London", instant), "2026-01-01");
+  // No timezone on file falls back to the local machine's date rather than throwing.
+  assert.equal(localDayInTZ(null, instant), localDay(instant));
+  // An invalid/unknown zone string degrades gracefully instead of crashing the page.
+  assert.doesNotThrow(() => localDayInTZ("Not/AZone", instant));
 });
 
 test("territory polygon round-trips (lat/lng order + closed ring)", () => {

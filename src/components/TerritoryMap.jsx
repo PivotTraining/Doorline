@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Polygon, Polyline, CircleMarker, useMap, useMapEvents } from "react-leaflet";
+import { geocodeZip } from "../lib/geocode.js";
+import { US_CENTER } from "../lib/geo.js";
+import { mapDefaultCenter } from "../store";
 
 // Colorful Waze-like basemap (same as the field map).
 const VIVID = {
@@ -7,7 +10,6 @@ const VIVID = {
   attr: "&copy; OpenStreetMap &copy; CARTO",
   subdomains: "abcd",
 };
-const ATLANTA = [33.749, -84.388];
 
 function Clicker({ onAdd }) {
   useMapEvents({ click: (e) => onAdd([+e.latlng.lat.toFixed(6), +e.latlng.lng.toFixed(6)]) });
@@ -40,26 +42,9 @@ export default function TerritoryMap({ territories, editId, onSave, onCancel, he
     if (!zip.trim()) return;
     setBusy(true);
     try {
-      const ctl = new AbortController();
-      const to = setTimeout(() => ctl.abort(), 8000);
-      const r = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&polygon_geojson=1&countrycodes=us&postalcode=${encodeURIComponent(zip.trim())}`,
-        { headers: { Accept: "application/json" }, signal: ctl.signal }
-      );
-      clearTimeout(to);
-      const hit = (await r.json())[0];
-      if (!hit) { alert("No match for that ZIP code."); return; }
-      const g = hit.geojson;
-      let ring = g?.type === "Polygon" ? g.coordinates[0] : g?.type === "MultiPolygon" ? g.coordinates[0][0] : null;
-      let poly;
-      if (ring) {
-        poly = ring.map(([lng, lat]) => [+lat.toFixed(6), +lng.toFixed(6)]);
-      } else {
-        const bb = hit.boundingbox.map(Number); // [south, north, west, east]
-        poly = [[bb[0], bb[2]], [bb[1], bb[2]], [bb[1], bb[3]], [bb[0], bb[3]]];
-      }
-      if (poly.length > 120) { const step = Math.ceil(poly.length / 120); poly = poly.filter((_, i) => i % step === 0); }
-      setPts(poly);
+      const hit = await geocodeZip(zip);
+      if (!hit?.boundary) { alert("No match for that ZIP code."); return; }
+      setPts(hit.boundary);
       setFit((n) => n + 1);
     } catch {
       alert("ZIP lookup needs an internet connection.");
@@ -68,9 +53,12 @@ export default function TerritoryMap({ territories, editId, onSave, onCancel, he
     }
   };
 
+  const center = mapDefaultCenter() || US_CENTER;
+  const initialZoom = mapDefaultCenter() ? 12 : 4;
+
   return (
     <div className="map-wrap" style={{ height }}>
-      <MapContainer center={ATLANTA} zoom={12} style={{ height: "100%", width: "100%" }} zoomControl={false}>
+      <MapContainer center={center} zoom={initialZoom} style={{ height: "100%", width: "100%" }} zoomControl={false}>
         <TileLayer url={VIVID.url} attribution={VIVID.attr} subdomains={VIVID.subdomains} maxZoom={20} />
         {editId && <Clicker onAdd={add} />}
         <Fitter pts={pts} token={fit} />

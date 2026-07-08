@@ -1,5 +1,11 @@
 // Geometry helpers (pure). Rings are [[lat,lng], ...].
 
+// Geographic center of the continental US — a neutral fallback map center
+// for a brand-new org that hasn't set a home ZIP yet. Deliberately NOT a
+// specific city (e.g. Atlanta), since that would misleadingly suggest the
+// product is anchored there.
+export const US_CENTER = [39.8283, -98.5795];
+
 // Ray-casting point-in-polygon. point = [lat, lng].
 export function pointInPolygon(point, ring) {
   if (!ring || ring.length < 3) return false;

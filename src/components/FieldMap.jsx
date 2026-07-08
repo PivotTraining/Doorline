@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, Polygon, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
-import { useStore, getState, DISPOS, addHome, setDoor } from "../store";
+import { useStore, getState, DISPOS, addHome, setDoor, mapDefaultCenter } from "../store";
 import DoorEditor from "./DoorEditor.jsx";
-import { repZones, pointInPolygon } from "../lib/geo.js";
+import { repZones, pointInPolygon, US_CENTER } from "../lib/geo.js";
 
 // fetch JSON with a hard timeout so the UI never hangs on a slow/offline network
 async function fetchJSON(url, ms = 6000) {
@@ -30,8 +30,6 @@ const TILES = {
     subdomains: "abc",
   },
 };
-
-const ATLANTA = [33.749, -84.388];
 
 // Icons are immutable per color — cache them so we don't allocate a new
 // Leaflet divIcon for every marker on every render.
@@ -97,6 +95,12 @@ export default function FieldMap({ repId = null, admin = false, height = 540 }) 
 
   const homes = admin ? state.homes : state.homes.filter((h) => h.repId === repId);
   const reps = state.users.filter((u) => u.role === "rep" && u.status === "active");
+  // A rep's own map centers on their home ZIP; the admin/team map centers on
+  // the org's. Neither ever defaults to a specific city — a fresh org with
+  // no home location set falls back to a neutral, zoomed-out US view.
+  const defaultCenter = mapDefaultCenter(admin ? null : repId);
+  const center = defaultCenter || US_CENTER;
+  const initialZoom = defaultCenter ? 13 : 4;
   // Territory zones: admins see all; a rep sees the zone(s) assigned to them.
   const zones = (admin ? state.territories : state.territories.filter((t) => t.assignedTo === repId))
     .filter((t) => t.boundary && t.boundary.length >= 3);
@@ -185,7 +189,7 @@ export default function FieldMap({ repId = null, admin = false, height = 540 }) 
 
   return (
     <div className="map-wrap" style={{ height }}>
-      <MapContainer center={ATLANTA} zoom={13} style={{ height: "100%", width: "100%" }} zoomControl={false}>
+      <MapContainer center={center} zoom={initialZoom} style={{ height: "100%", width: "100%" }} zoomControl={false}>
         <MapBinder mapRef={mapRef} />
         <TileLayer key={layer} url={t.url} attribution={t.attr} subdomains={t.subdomains} maxZoom={20} />
         {repId && <ClickToDrop onDrop={dropDoor} />}

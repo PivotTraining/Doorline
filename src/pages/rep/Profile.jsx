@@ -64,14 +64,13 @@ export default function Profile({ user }) {
       <div className="card" style={{ marginTop: 14 }}>
         <h3>📍 Location sharing</h3>
         <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
-          While on, Doorline records the route you cover during a shift so your effort is credited — even on doors you didn't log.
-          It only runs while you're signed in and stops when you sign out.
+          Required to use the field app — your employer uses this to credit your effort and confirm
+          you're in your assigned territory. It only runs while you're signed in and stops the
+          instant you sign out.
         </p>
         <div className="row between">
-          <span className="pill"><span className="dot" style={{ background: tracking ? "var(--green)" : "var(--muted)" }} /> {tracking ? "Sharing on" : "Off"}</span>
-          {tracking
-            ? <button className="btn" onClick={() => setConsent(user.id, "denied")}>Turn off</button>
-            : <button className="btn primary" onClick={() => setConsent(user.id, "granted")}>Turn on</button>}
+          <span className="pill"><span className="dot" style={{ background: tracking ? "var(--green)" : "var(--red)" }} /> {tracking ? "Sharing on (required)" : "Not sharing — sign in again to continue"}</span>
+          {!tracking && <button className="btn primary" onClick={() => setConsent(user.id, "granted")}>Allow now</button>}
         </div>
       </div>
     </>

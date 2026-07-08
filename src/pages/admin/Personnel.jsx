@@ -1,18 +1,36 @@
 import { useState } from "react";
 import { useStore, getState, addUser, updateUser, removeUser, toggleStatus, ROLE_LABEL, PLAN_NAME } from "../../store";
+import { geocodeZip } from "../../lib/geocode.js";
+import { US_TIMEZONES, guessTimezone } from "../../lib/date.js";
 import Modal from "../../components/Modal.jsx";
 
 const ROLES = ["owner", "admin", "manager", "rep", "viewer"];
 const PLANS = [3900, 5900, 8900];
-const blank = { name: "", email: "", role: "rep", plan: 5900, territory: "—", pass: "" };
+const blank = () => ({ name: "", email: "", role: "rep", plan: 5900, territory: "—", pass: "", timezone: guessTimezone(), homeZip: "", homeLat: null, homeLng: null });
 
 export default function Personnel() {
   useStore();
   const state = getState();
   const [form, setForm] = useState(null); // {mode:'add'|'edit', data}
   const [err, setErr] = useState("");
+  const [zipBusy, setZipBusy] = useState(false);
 
-  const open = (mode, data) => { setErr(""); setForm({ mode, data: data ? { ...data } : { ...blank } }); };
+  const open = (mode, data) => { setErr(""); setForm({ mode, data: data ? { timezone: "", homeZip: "", homeLat: null, homeLng: null, ...data } : blank() }); };
+
+  const lookupZip = async () => {
+    const zip = form.data.homeZip;
+    if (!zip?.trim()) return;
+    setZipBusy(true);
+    try {
+      const hit = await geocodeZip(zip);
+      if (!hit) return alert("No match for that ZIP code.");
+      setForm((f) => ({ ...f, data: { ...f.data, homeLat: hit.lat, homeLng: hit.lng } }));
+    } catch {
+      alert("ZIP lookup needs an internet connection.");
+    } finally {
+      setZipBusy(false);
+    }
+  };
 
   const submit = () => {
     const d = form.data;
@@ -21,13 +39,14 @@ export default function Personnel() {
       const r = addUser(d);
       if (r.error) return setErr(r.error);
     } else {
-      updateUser(d.id, { name: d.name, role: d.role, plan: Number(d.plan), territory: d.territory });
+      updateUser(d.id, { name: d.name, role: d.role, plan: Number(d.plan), territory: d.territory, timezone: d.timezone || null, homeZip: d.homeZip || null, homeLat: d.homeLat, homeLng: d.homeLng });
     }
     setForm(null);
   };
 
   const billed = state.users.filter((u) => u.plan > 0 && u.status === "active");
   const monthly = billed.reduce((a, u) => a + u.plan, 0);
+  const needsLocation = (role) => ["rep", "manager"].includes(role);
 
   return (
     <>
@@ -42,7 +61,7 @@ export default function Personnel() {
       <div className="card">
         <table className="tbl">
           <thead>
-            <tr><th>Name</th><th>Email</th><th>Role</th><th>Territory</th><th>Plan</th><th>Status</th><th></th></tr>
+            <tr><th>Name</th><th>Email</th><th>Role</th><th>Territory</th><th>Home ZIP</th><th>Plan</th><th>Status</th><th></th></tr>
           </thead>
           <tbody>
             {state.users.map((u) => (
@@ -51,6 +70,7 @@ export default function Personnel() {
                 <td className="muted">{u.email}</td>
                 <td><span className="tag">{ROLE_LABEL[u.role]}</span></td>
                 <td className="muted">{u.territory}</td>
+                <td className="muted">{u.homeZip || "—"}</td>
                 <td className="muted">{PLAN_NAME[u.plan] || "—"}{u.plan > 0 ? ` · $${(u.plan / 100).toFixed(0)}` : ""}</td>
                 <td>
                   <span className="pill">
@@ -104,6 +124,29 @@ export default function Personnel() {
               <input className="input" value={form.data.territory} onChange={(e) => setForm({ ...form, data: { ...form.data, territory: e.target.value } })} />
             </label>
           </div>
+          {needsLocation(form.data.role) && (
+            <>
+              <label className="field">
+                <span>Home ZIP code</span>
+                <div className="row" style={{ gap: 8 }}>
+                  <input className="input" style={{ flex: 1 }} value={form.data.homeZip} placeholder="e.g. 30301" inputMode="numeric"
+                    onChange={(e) => setForm({ ...form, data: { ...form.data, homeZip: e.target.value, homeLat: null, homeLng: null } })} />
+                  <button className="btn sm" type="button" onClick={lookupZip} disabled={zipBusy || !form.data.homeZip?.trim()}>{zipBusy ? "…" : "Look up"}</button>
+                </div>
+                {form.data.homeZip && (form.data.homeLat != null
+                  ? <small style={{ color: "var(--green)" }}>✓ Location set — their map centers here instead of the company default.</small>
+                  : <small className="muted">Not looked up yet — falls back to the company default location until you do.</small>)}
+              </label>
+              <label className="field">
+                <span>Timezone</span>
+                <select className="select" value={form.data.timezone || ""} onChange={(e) => setForm({ ...form, data: { ...form.data, timezone: e.target.value } })}>
+                  <option value="">— Use device default —</option>
+                  {US_TIMEZONES.map((z) => <option key={z.tz} value={z.tz}>{z.lab}</option>)}
+                </select>
+                <small className="muted">Their Street Sheet resets to zero at midnight in this timezone.</small>
+              </label>
+            </>
+          )}
           {["rep", "manager"].includes(form.data.role) && (
             <label className="field">
               <span>Plan (billable seat)</span>

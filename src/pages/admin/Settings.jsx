@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useStore, getState, setOrg, setFollowupSettings } from "../../store";
 import { useTheme, setTheme } from "../../theme.js";
+import { geocodeZip } from "../../lib/geocode.js";
 
 export default function Settings() {
   useStore();
@@ -9,6 +10,24 @@ export default function Settings() {
   const fu = org.followup || {};
   const [name, setName] = useState(org.name);
   const [saved, setSaved] = useState(false);
+  const [zip, setZip] = useState(org.homeZip || "");
+  const [zipBusy, setZipBusy] = useState(false);
+  const [zipSaved, setZipSaved] = useState(false);
+
+  const saveZip = async () => {
+    if (!zip.trim()) return;
+    setZipBusy(true);
+    try {
+      const hit = await geocodeZip(zip);
+      if (!hit) return alert("No match for that ZIP code.");
+      setOrg({ homeZip: zip.trim(), homeLat: hit.lat, homeLng: hit.lng });
+      setZipSaved(true); setTimeout(() => setZipSaved(false), 1500);
+    } catch {
+      alert("ZIP lookup needs an internet connection.");
+    } finally {
+      setZipBusy(false);
+    }
+  };
 
   const onFile = (e) => {
     const f = e.target.files?.[0];
@@ -50,6 +69,23 @@ export default function Settings() {
               </div>
             </div>
           </div>
+        </div>
+
+        <div className="card">
+          <h3>📍 Company location</h3>
+          <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+            Sets where your team's maps center by default (new reps without their own home ZIP use
+            this too) — instead of defaulting to any particular city.
+          </p>
+          <label className="field">
+            <span>Home ZIP code</span>
+            <input className="input" value={zip} onChange={(e) => setZip(e.target.value)} placeholder="e.g. 30301" inputMode="numeric" />
+          </label>
+          <div className="row">
+            <button className="btn primary" onClick={saveZip} disabled={zipBusy}>{zipBusy ? "Looking up…" : "Save location"}</button>
+            {zipSaved && <span className="muted">Saved ✓</span>}
+          </div>
+          {org.homeZip && <p className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 0 }}>Current default: {org.homeZip}</p>}
         </div>
 
         <div className="card">

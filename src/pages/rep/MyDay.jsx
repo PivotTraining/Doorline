@@ -31,11 +31,12 @@ export default function MyDay({ user }) {
       )}
 
       <div className="cards grid-4" style={{ marginBottom: 18 }}>
-        <Stat n={s.knocks} l="Doors worked" />
-        <Stat n={s.contacts} l="Conversations" />
-        <Stat n={s.appts} l="Appointments" />
-        <Stat n={s.closes} l="Sales" sub={`${s.rate}% close rate`} />
+        <Stat n={s.doors} l="Doors knocked" />
+        <Stat n={s.dm} l="Decision makers" />
+        <Stat n={s.d} l="Deals" sub={s.contacts ? `${s.rate}% close rate` : undefined} />
+        <Stat n={s.ni} l="Not interested" />
       </div>
+      <p className="muted" style={{ fontSize: 12, marginTop: -10, marginBottom: 18 }}>Today's Street Sheet — resets at midnight, your time.</p>
 
       <div className="cards grid-2">
         <div className="card">

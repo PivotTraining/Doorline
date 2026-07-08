@@ -9,9 +9,10 @@ import { useSyncExternalStore, useReducer, useRef, useEffect } from "react";
 import { supabase, DEMO } from "./supabaseClient";
 import * as sync from "./api/sync";
 import * as M from "./api/mappers";
-import { localDay } from "./lib/date.js";
+import { localDay, localDayInTZ, guessTimezone } from "./lib/date.js";
+import { repZones, pointInPolygon, US_CENTER } from "./lib/geo.js";
 
-export { localDay };
+export { localDay, localDayInTZ, US_CENTER };
 
 const KEY = "doorline_state_v1";
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : "id" + Math.random().toString(36).slice(2));
@@ -50,8 +51,11 @@ export const SHEET_COLS = [
 // ---------- seed (demo) ----------
 function seed() {
   const now = Date.now();
-  const C = [33.749, -84.388]; // Atlanta
-  const mk = (name, email, role, plan, terr) => ({ id: uid(), name, email, pass: role === "rep" ? "rep" : role === "viewer" ? "view" : "admin", role, status: "active", plan, territory: terr });
+  const C = [33.749, -84.388]; // Atlanta — fictional demo company only; real orgs never default here (see org.homeLat/homeLng below)
+  const mk = (name, email, role, plan, terr) => ({
+    id: uid(), name, email, pass: role === "rep" ? "rep" : role === "viewer" ? "view" : "admin", role, status: "active", plan, territory: terr,
+    timezone: "America/New_York", homeZip: "30301", homeLat: C[0], homeLng: C[1],
+  });
   const users = [
     mk("Chris Davis", "admin@doorline.app", "owner", 0, "—"),
     mk("Jazmine Davis", "jaz@doorline.app", "manager", 5900, "All"),
@@ -81,7 +85,12 @@ function seed() {
   });
 
   // company / org branding + manager-set follow-up/nudge rules
-  const org = { name: "Doorline", logo: null, followup: { enabled: true, hours: 24, onPhone: true, onCB: true, quietStart: "21:00", quietEnd: "08:00" } };
+  // homeZip/homeLat/homeLng here are the DEMO company's fictional Atlanta base —
+  // a real org's org.homeZip/homeLat/homeLng start null (see hydrate()) until an
+  // admin sets a real one in Settings; the map falls back to a neutral US-wide
+  // view, never to Atlanta specifically.
+  const org = { name: "Doorline", logo: null, homeZip: "30301", homeLat: C[0], homeLng: C[1],
+    followup: { enabled: true, hours: 24, onPhone: true, onCB: true, quietStart: "21:00", quietEnd: "08:00" } };
 
   // bulletin board — admins broadcast to the whole team
   const owner = users.find((u) => u.role === "owner");
@@ -141,7 +150,12 @@ function seed() {
 // Fill in fields that older persisted state won't have (forward migration).
 function hydrate(s) {
   if (!s) return null;
+  // Neutral fallback — a real org that hasn't set a home location yet stays
+  // null (map falls back to a US-wide view), never Atlanta or any other city.
   s.org = s.org || { name: "Doorline", logo: null };
+  s.org.homeZip = s.org.homeZip ?? null;
+  s.org.homeLat = s.org.homeLat ?? null;
+  s.org.homeLng = s.org.homeLng ?? null;
   s.org.followup = s.org.followup || { enabled: true, hours: 24, onPhone: true, onCB: true, quietStart: "21:00", quietEnd: "08:00" };
   s.posts = s.posts || [];
   s.territories = s.territories || [];
@@ -151,6 +165,22 @@ function hydrate(s) {
   s.submittedDays = s.submittedDays || {};
   s.homes = (s.homes || []).map((h) => ({ activity: [], ...h }));
   s.deals = (s.deals || []).map((d) => ({ ts: Date.now(), ...d }));
+  // Real users created before this field existed keep working — a missing
+  // timezone falls back to the browser's own at read time, never a guess
+  // baked into their record.
+  s.users = (s.users || []).map((u) => ({ timezone: null, homeZip: null, homeLat: null, homeLng: null, ...u }));
+
+  // 90-day retention: each rep's daily Street Sheet stays reviewable/
+  // downloadable for 90 days in THEIR OWN timezone, then ages out.
+  if (s.streetRows && s.streetRows.length) {
+    const cutoffFor = {};
+    s.users.forEach((u) => {
+      const cutoff = new Date(localDayInTZ(u.timezone) + "T00:00:00");
+      cutoff.setDate(cutoff.getDate() - 90);
+      cutoffFor[u.id] = localDay(cutoff);
+    });
+    s.streetRows = s.streetRows.filter((r) => !cutoffFor[r.repId] || r.date >= cutoffFor[r.repId]);
+  }
   return s;
 }
 
@@ -249,10 +279,13 @@ export function login(email, pass) {
 export function logout() { state.sessionId = null; emit(); }
 
 // ---------- personnel ----------
-export function addUser({ name, email, role, plan, territory, pass }) {
+export function addUser({ name, email, role, plan, territory, pass, timezone, homeZip, homeLat, homeLng }) {
   if (state.users.some(u => u.email.toLowerCase() === email.toLowerCase())) return { error: "Email already in use" };
   const free = role === "admin" || role === "owner" || role === "viewer";
-  const u = { id: uid(), name, email, pass: pass || "rep", role, status: "active", plan: free ? 0 : plan, territory };
+  const u = {
+    id: uid(), name, email, pass: pass || "rep", role, status: "active", plan: free ? 0 : plan, territory,
+    timezone: timezone || null, homeZip: homeZip || null, homeLat: homeLat ?? null, homeLng: homeLng ?? null,
+  };
   state.users.push(u);
   emit(); push("profiles", u); return {};
 }
@@ -323,15 +356,42 @@ export function addBreadcrumb(repId, pt) {
 }
 export function clearTrack(repId) { state.tracks[repId] = []; emit(); }
 
-// Accountability: minutes online vs. doors actually worked this session.
+// Accountability: minutes online vs. doors actually worked TODAY (the
+// rep's own timezone) — comparing a lifetime door count against today's
+// online minutes would always look "productive," even on an idle day.
 export function repAccountability(repId) {
   const t = state.tracks[repId] || [];
   const p = state.presence[repId] || {};
   let mins = 0;
   if (p.online && p.since) mins = Math.round((Date.now() - p.since) / 60000);
   else if (t.length > 1) mins = Math.round((t[t.length - 1].ts - t[0].ts) / 60000);
-  const doors = state.homes.filter((h) => h.repId === repId && (h.status !== "untouched" || (h.activity && h.activity.length))).length;
+  const u = state.users.find((x) => x.id === repId);
+  const today = localDayInTZ(u?.timezone);
+  const doors = state.streetRows.filter((r) => r.repId === repId && r.date === today && (r.nh || r.rl || r.dm || r.bid || r.d || r.ni || r.street)).length;
   return { mins, doors, points: t.length, online: !!p.online, consent: p.consent };
+}
+
+// Default map center for a rep (their own home ZIP, else the org's, else
+// null so the caller falls back to a neutral, zoomed-out view — never a
+// hardcoded city).
+export function mapDefaultCenter(repId) {
+  const u = repId ? state.users.find((x) => x.id === repId) : null;
+  if (u?.homeLat != null && u?.homeLng != null) return [u.homeLat, u.homeLng];
+  if (state.org.homeLat != null && state.org.homeLng != null) return [state.org.homeLat, state.org.homeLng];
+  return null;
+}
+
+// Geofencing: is the rep's most recent GPS point inside any zone assigned
+// to them? Returns null (nothing to flag) when they have no zone assigned
+// or no location history yet.
+export function repGeofenceStatus(repId) {
+  const zones = repZones(state, repId);
+  if (!zones.length) return null;
+  const pts = state.tracks[repId] || [];
+  const last = pts[pts.length - 1];
+  if (!last) return null;
+  const inside = zones.some((z) => pointInPolygon([last.lat, last.lng], z.boundary));
+  return { inside, zoneName: zones[0].name, at: last.ts };
 }
 
 // ---------- street sheet ----------
@@ -370,15 +430,21 @@ export function reopenDay(repId, date) { delete state.submittedDays[dayKey(repId
 export function isDaySubmitted(repId, date) { return !!state.submittedDays[dayKey(repId, date)]; }
 
 // Combined stats for My Day: map doors + street-sheet work.
+// Today's Street Sheet totals for a rep, in THEIR OWN timezone — this is
+// what resets to zero at their local midnight (see hydrate()'s 90-day
+// purge for the archive side of that same policy). Deliberately NOT
+// blended with lifetime Map/Doors stats (state.homes has no per-event
+// timestamp, so there's no way to know if a door's status changed today
+// or months ago — repStats()/the Leaderboard/Profile pages still show
+// that lifetime view explicitly, which is the correct place for it).
 export function dayStats(repId) {
-  const s = repStats(repId);
-  const rows = state.streetRows.filter((r) => r.repId === repId);
-  const worked = rows.filter((r) => r.nh || r.rl || r.dm || r.bid || r.d || r.ni || r.street).length;
-  const dm = rows.filter((r) => r.dm).length;
-  const sold = rows.filter((r) => r.d).length;
-  const contacts = s.contacts + dm;
-  const closes = s.closes + sold;
-  return { knocks: s.knocks + worked, contacts, appts: s.appts, closes, rate: contacts ? Math.round((closes / contacts) * 100) : 0 };
+  const u = state.users.find((x) => x.id === repId);
+  const today = localDayInTZ(u?.timezone);
+  const rows = state.streetRows.filter((r) => r.repId === repId && r.date === today);
+  const t = sheetTotals(rows);
+  const contacts = rows.filter((r) => r.dm || r.bid || r.d || r.ni).length;
+  const rate = contacts ? Math.round((t.d / contacts) * 100) : 0;
+  return { ...t, contacts, rate };
 }
 export function removeStreetRow(id) {
   const r = state.streetRows.find((x) => x.id === id);

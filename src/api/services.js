@@ -21,7 +21,9 @@ export async function loadAll() {
     supabase.from("street_rows").select("*"),
   ]);
   return {
-    org: o.data ? { name: o.data.name, logo: o.data.logo_path } : { name: "Doorline", logo: null },
+    org: o.data
+      ? { name: o.data.name, logo: o.data.logo_path, homeZip: o.data.home_zip || null, homeLat: o.data.home_lat ?? null, homeLng: o.data.home_lng ?? null }
+      : { name: "Doorline", logo: null, homeZip: null, homeLat: null, homeLng: null },
     users: (profiles.data || []).map(M.profileFromRow),
     homes: (homes.data || []).map(M.homeFromRow),
     deals: (deals.data || []).map((r) => M.dealFromRow({ ...r, addr: r.homes?.addr })),
@@ -42,7 +44,10 @@ export const upsertTerritory = (t)      => supabase.from("territories").upsert(M
 export const deleteTerritory = (id)     => supabase.from("territories").delete().eq("id", id);
 export const upsertStreetRow = (r)      => supabase.from("street_rows").upsert(M.streetRowToRow(r, org()));
 export const deleteStreetRow = (id)     => supabase.from("street_rows").delete().eq("id", id);
-export const upsertOrg       = (o)      => supabase.from("organizations").update({ name: o.name, logo_path: o.logo, followup: o.followup }).eq("id", org());
+export const upsertOrg       = (o)      => supabase.from("organizations").update({
+  name: o.name, logo_path: o.logo, followup: o.followup,
+  home_zip: o.homeZip || null, home_lat: o.homeLat ?? null, home_lng: o.homeLng ?? null,
+}).eq("id", org());
 
 // Transactional / aggregate work via RPC.
 export const recordActivity  = (homeId, type) => supabase.rpc("record_door_activity", { home_id: homeId, atype: type });
