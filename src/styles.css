@@ -162,6 +162,19 @@ label.field > span { display: block; font-size: 13px; color: var(--muted); margi
   background: var(--panel-2);
   box-shadow: inset 0 -1px 0 var(--border), 0 1px 0 var(--border);
 }
+/* Pin the slot # and street address so scrolling right to reach far columns
+   (e.g. "Not interested") never loses track of which door you're on. */
+.sheet-tbl td:first-child, .sheet-tbl th:first-child {
+  position: sticky; left: 0; z-index: 2; background: var(--panel);
+}
+.sheet-tbl td:nth-child(2), .sheet-tbl th:nth-child(2) {
+  position: sticky; left: 38px; z-index: 2; background: var(--panel);
+  box-shadow: inset 0 -1px 0 var(--border), 2px 0 4px -2px rgba(0,0,0,.18);
+}
+.sheet-tbl thead th:first-child, .sheet-tbl thead th:nth-child(2) {
+  z-index: 4; background: var(--panel-2);
+}
+.sheet-row-blank { opacity: 0.88; }
 
 /* ---------- table ---------- */
 table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }

@@ -1,53 +1,54 @@
-import { useState, useCallback, memo } from "react";
+import { useState, useCallback, useEffect, memo } from "react";
 import { useStore, getState, SHEET_COLS, addStreetRow, updateStreetRow, removeStreetRow, sheetTotals, submitDay, reopenDay, isDaySubmitted } from "../../store";
 
 const SLOTS = 100;
 const today = () => new Date().toISOString().slice(0, 10);
-const cellStyle = { padding: "4px 6px", borderBottom: "1px solid var(--border)", textAlign: "center" };
+const cellStyle = { padding: "4px 6px", textAlign: "center" };
 const pad = { padding: "6px 8px" };
+const BLANK = { street: "", customer: "", phone: "", comments: "", cb: "" };
 
-// A worked slot: existing row. Primitive props + stable callbacks → only the edited row repaints.
-const SheetRow = memo(function SheetRow({ id, slot, street, nh, rl, dm, bid, d, ni, customer, phone, comments, cb, onSet, onRemove }) {
-  const flags = { nh, rl, dm, bid, d, ni };
+// One row component for EVERY slot, blank or worked — keyed by the stable
+// slot number so React never tears the DOM node down when a blank slot
+// gets its first character or checkbox. (Previously a blank slot and a
+// worked slot were different component types/keys; the first tap on a
+// fresh slot swapped in a whole new DOM node mid-interaction, which on a
+// touchscreen ate the tap and dropped keyboard focus — you'd type an
+// address and have it "pop back out" instead of sticking.)
+const Row = memo(function Row({ slot, id, street, nh, rl, dm, bid, d, ni, customer, phone, comments, cb, onSet, onCreate, onRemove }) {
+  const [draft, setDraft] = useState(BLANK);
+  const isReal = !!id;
+  const cur = isReal ? { street, customer, phone, comments, cb, nh, rl, dm, bid, d, ni } : draft;
+
+  const setText = (key) => (e) => {
+    const value = e.target.value;
+    if (isReal) { onSet(id, { [key]: value }); return; }
+    const merged = { ...draft, [key]: value };
+    setDraft(merged);
+    if (Object.values(merged).some((x) => x.trim())) onCreate(slot, merged);
+  };
+  const setFlag = (key) => (e) => {
+    const value = e.target.checked;
+    if (isReal) { onSet(id, { [key]: value }); return; }
+    if (!value) return; // unchecking a slot that was never created is a no-op
+    const merged = { ...draft, [key]: true };
+    setDraft(merged);
+    onCreate(slot, merged);
+  };
+
   return (
-    <tr>
+    <tr className={isReal ? undefined : "sheet-row-blank"}>
       <td className="muted" style={{ textAlign: "center" }}>{slot}</td>
-      <td><input className="input" style={pad} value={street} placeholder="580 Noah Ave" onChange={(e) => onSet(id, { street: e.target.value })} /></td>
+      <td><input className="input" style={pad} value={cur.street} placeholder="Street address" onChange={setText("street")} /></td>
       {SHEET_COLS.map((c) => (
         <td key={c.key} style={cellStyle}>
-          <input type="checkbox" checked={!!flags[c.key]} onChange={(e) => onSet(id, { [c.key]: e.target.checked })} style={{ width: 18, height: 18, accentColor: "var(--brand)" }} />
+          <input type="checkbox" checked={!!cur[c.key]} onChange={setFlag(c.key)} style={{ width: 18, height: 18, accentColor: "var(--brand)" }} />
         </td>
       ))}
-      <td><input className="input" style={pad} value={customer} onChange={(e) => onSet(id, { customer: e.target.value })} /></td>
-      <td><input className="input" style={pad} type="tel" value={phone} placeholder="phone → nudge" onChange={(e) => onSet(id, { phone: e.target.value })} /></td>
-      <td><input className="input" style={pad} value={comments} onChange={(e) => onSet(id, { comments: e.target.value })} /></td>
-      <td><input className="input" style={pad} value={cb} placeholder="5:30" onChange={(e) => onSet(id, { cb: e.target.value })} /></td>
-      <td><button className="x" title="Clear" onClick={() => onRemove(id)}>×</button></td>
-    </tr>
-  );
-});
-
-// An empty slot: holds local text until committed (on blur, or immediately on a
-// disposition checkbox), so a slot only becomes a real "knocked" door once worked.
-const EmptyRow = memo(function EmptyRow({ slot, onCreate }) {
-  const [v, setV] = useState({ street: "", customer: "", phone: "", comments: "", cb: "" });
-  const set = (k) => (e) => setV((p) => ({ ...p, [k]: e.target.value }));
-  const commit = () => { if (Object.values(v).some((x) => x.trim())) onCreate(slot, { ...v }); };
-  const flag = (key) => onCreate(slot, { ...v, [key]: true });
-  return (
-    <tr style={{ opacity: 0.92 }}>
-      <td className="muted" style={{ textAlign: "center" }}>{slot}</td>
-      <td><input className="input" style={pad} value={v.street} onChange={set("street")} onBlur={commit} /></td>
-      {SHEET_COLS.map((c) => (
-        <td key={c.key} style={cellStyle}>
-          <input type="checkbox" checked={false} onChange={() => flag(c.key)} style={{ width: 18, height: 18, accentColor: "var(--brand)" }} />
-        </td>
-      ))}
-      <td><input className="input" style={pad} value={v.customer} onChange={set("customer")} onBlur={commit} /></td>
-      <td><input className="input" style={pad} type="tel" value={v.phone} onChange={set("phone")} onBlur={commit} /></td>
-      <td><input className="input" style={pad} value={v.comments} onChange={set("comments")} onBlur={commit} /></td>
-      <td><input className="input" style={pad} value={v.cb} onChange={set("cb")} onBlur={commit} /></td>
-      <td></td>
+      <td><input className="input" style={pad} value={cur.customer} onChange={setText("customer")} /></td>
+      <td><input className="input" style={pad} type="tel" value={cur.phone} placeholder="phone → nudge" onChange={setText("phone")} /></td>
+      <td><input className="input" style={pad} value={cur.comments} onChange={setText("comments")} /></td>
+      <td><input className="input" style={pad} value={cur.cb} placeholder="5:30" onChange={setText("cb")} /></td>
+      <td>{isReal && <button className="x" title="Clear" onClick={() => { onRemove(id); setDraft(BLANK); }}>×</button>}</td>
     </tr>
   );
 });
@@ -56,6 +57,9 @@ export default function StreetSheet({ user }) {
   useStore();
   const state = getState();
   const [date, setDate] = useState(today());
+  const [extraSlots, setExtraSlots] = useState(0);
+  useEffect(() => { setExtraSlots(0); }, [date]);
+
   const rows = state.streetRows.filter((r) => r.repId === user.id && r.date === date);
   const t = sheetTotals(rows);
   const submitted = isDaySubmitted(user.id, date);
@@ -64,12 +68,13 @@ export default function StreetSheet({ user }) {
   const onRemove = useCallback((id) => removeStreetRow(id), []);
   const onCreate = useCallback((slot, patch) => addStreetRow({ repId: user.id, date, slot, ...patch }), [user.id, date]);
 
-  // Place worked rows by their slot; lay everything else out across 100 slots.
+  // Place worked rows by their slot; lay everything else out across the grid.
   const bySlot = {};
   const noSlot = [];
   rows.forEach((r) => (r.slot ? (bySlot[r.slot] = r) : noSlot.push(r)));
   let n = 1; noSlot.forEach((r) => { while (bySlot[n]) n++; bySlot[n] = r; n++; });
-  const maxSlot = Math.max(SLOTS, ...Object.keys(bySlot).map(Number), 0);
+  const touchedMax = Object.keys(bySlot).reduce((m, k) => Math.max(m, Number(k)), 0);
+  const maxSlot = Math.max(SLOTS + extraSlots, touchedMax);
 
   const complete = () => {
     if (confirm(`Complete ${date}'s sheet? You can reopen it if needed. Tomorrow starts a fresh sheet.`)) submitDay(user.id, date);
@@ -103,7 +108,7 @@ export default function StreetSheet({ user }) {
         <table className="tbl sheet-tbl" style={{ minWidth: 820 }}>
           <thead>
             <tr>
-              <th style={{ width: 34 }}>#</th>
+              <th style={{ width: 38 }}>#</th>
               <th style={{ minWidth: 130 }}>Street / #</th>
               {SHEET_COLS.map((c) => <th key={c.key} title={c.title} style={{ textAlign: "center", width: 46 }}>{c.lab}</th>)}
               <th style={{ minWidth: 120 }}>Customer</th>
@@ -117,21 +122,23 @@ export default function StreetSheet({ user }) {
             {Array.from({ length: maxSlot }).map((_, i) => {
               const slot = i + 1;
               const r = bySlot[slot];
-              return r ? (
-                <SheetRow key={r.id} id={r.id} slot={slot} street={r.street}
-                  nh={r.nh} rl={r.rl} dm={r.dm} bid={r.bid} d={r.d} ni={r.ni}
-                  customer={r.customer} phone={r.phone} comments={r.comments} cb={r.cb} onSet={onSet} onRemove={onRemove} />
-              ) : (
-                <EmptyRow key={"e" + slot} slot={slot} onCreate={onCreate} />
+              return (
+                <Row key={slot} slot={slot}
+                  id={r?.id} street={r?.street} nh={r?.nh} rl={r?.rl} dm={r?.dm} bid={r?.bid} d={r?.d} ni={r?.ni}
+                  customer={r?.customer} phone={r?.phone} comments={r?.comments} cb={r?.cb}
+                  onSet={onSet} onCreate={onCreate} onRemove={onRemove} />
               );
             })}
           </tbody>
         </table>
       </div>
 
-      <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-        <b>Key:</b> NH Not Home · RL Reloop · DM Decision Maker · B/ID Bill or ID · D Deal (→ My Deals) · NI Not Interested · CB Call Back
-      </p>
+      <div className="row between" style={{ marginTop: 10, flexWrap: "wrap", gap: 10 }}>
+        <p className="muted" style={{ fontSize: 12, margin: 0 }}>
+          <b>Key:</b> NH Not Home · RL Reloop · DM Decision Maker · B/ID Bill or ID · D Deal (→ My Deals) · NI Not Interested · CB Call Back
+        </p>
+        <button className="btn sm" onClick={() => setExtraSlots((x) => x + 50)}>+ 50 more slots</button>
+      </div>
     </>
   );
 }
