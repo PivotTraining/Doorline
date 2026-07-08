@@ -60,6 +60,14 @@ test("localDayInTZ resolves a REP'S OWN stored timezone, independent of the view
   assert.doesNotThrow(() => localDayInTZ("Not/AZone", instant));
 });
 
+test("street row round-trips including the Not Qualified disposition", () => {
+  const r = { id: "s1", repId: "r1", date: "2026-07-08", street: "1 Maple", nh: false, rl: false,
+    dm: false, bid: false, d: false, ni: false, nq: true, customer: "C", phone: "555", comments: "", cb: "5:30", done: false, snoozeUntil: 0 };
+  const back = M.streetRowFromRow(M.streetRowToRow(r, "org1"));
+  assert.equal(back.nq, true);
+  assert.equal(back.cb, "5:30");
+});
+
 test("territory polygon round-trips (lat/lng order + closed ring)", () => {
   const ring = [[33.70, -84.40], [33.72, -84.40], [33.72, -84.38]];
   const row = M.territoryToRow({ id: "t1", name: "North", color: "#000", assignedTo: "r1", boundary: ring, start: "", end: "", notes: "" }, "org1");

@@ -15,10 +15,17 @@ const BLANK = { street: "", customer: "", phone: "", comments: "", cb: "" };
 // fresh slot swapped in a whole new DOM node mid-interaction, which on a
 // touchscreen ate the tap and dropped keyboard focus — you'd type an
 // address and have it "pop back out" instead of sticking.)
-const Row = memo(function Row({ slot, id, street, nh, rl, dm, bid, d, ni, customer, phone, comments, cb, onSet, onCreate, onRemove }) {
+// On phones, the on-screen keyboard shrinks the visible viewport; a focused
+// input near the right/bottom edge of the sheet's own scroll container can
+// end up hidden behind that keyboard even though it's still accepting
+// keystrokes — it just looks like typing "does nothing" because you can't
+// see it happen. Nudge the field into view whenever it gains focus.
+const keepVisible = (e) => { e.target.scrollIntoView({ block: "nearest", inline: "nearest" }); };
+
+const Row = memo(function Row({ slot, id, street, nh, rl, dm, bid, d, ni, nq, customer, phone, comments, cb, onSet, onCreate, onRemove }) {
   const [draft, setDraft] = useState(BLANK);
   const isReal = !!id;
-  const cur = isReal ? { street, customer, phone, comments, cb, nh, rl, dm, bid, d, ni } : draft;
+  const cur = isReal ? { street, customer, phone, comments, cb, nh, rl, dm, bid, d, ni, nq } : draft;
 
   const setText = (key) => (e) => {
     const value = e.target.value;
@@ -39,16 +46,16 @@ const Row = memo(function Row({ slot, id, street, nh, rl, dm, bid, d, ni, custom
   return (
     <tr className={isReal ? undefined : "sheet-row-blank"}>
       <td className="muted" style={{ textAlign: "center" }}>{slot}</td>
-      <td><input className="input" style={pad} value={cur.street} placeholder="Street address" onChange={setText("street")} /></td>
+      <td><input className="input" style={pad} value={cur.street} placeholder="Street address" autoComplete="off" onFocus={keepVisible} onChange={setText("street")} /></td>
       {SHEET_COLS.map((c) => (
         <td key={c.key} style={cellStyle}>
           <input type="checkbox" checked={!!cur[c.key]} onChange={setFlag(c.key)} style={{ width: 18, height: 18, accentColor: "var(--brand)" }} />
         </td>
       ))}
-      <td><input className="input" style={pad} value={cur.customer} onChange={setText("customer")} /></td>
-      <td><input className="input" style={pad} type="tel" value={cur.phone} placeholder="phone → nudge" onChange={setText("phone")} /></td>
-      <td><input className="input" style={pad} value={cur.comments} onChange={setText("comments")} /></td>
-      <td><input className="input" style={pad} value={cur.cb} placeholder="5:30" onChange={setText("cb")} /></td>
+      <td><input className="input" style={pad} value={cur.customer} autoComplete="off" onFocus={keepVisible} onChange={setText("customer")} /></td>
+      <td><input className="input" style={pad} type="tel" value={cur.phone} placeholder="phone → nudge" autoComplete="off" onFocus={keepVisible} onChange={setText("phone")} /></td>
+      <td><input className="input" style={pad} value={cur.comments} autoComplete="off" onFocus={keepVisible} onChange={setText("comments")} /></td>
+      <td><input className="input" style={pad} value={cur.cb} placeholder="5:30" autoComplete="off" onFocus={keepVisible} onChange={setText("cb")} /></td>
       <td>{isReal && <button className="x" title="Clear" onClick={() => { onRemove(id); setDraft(BLANK); }}>×</button>}</td>
     </tr>
   );
@@ -125,7 +132,7 @@ export default function StreetSheet({ user }) {
               const r = bySlot[slot];
               return (
                 <Row key={slot} slot={slot}
-                  id={r?.id} street={r?.street} nh={r?.nh} rl={r?.rl} dm={r?.dm} bid={r?.bid} d={r?.d} ni={r?.ni}
+                  id={r?.id} street={r?.street} nh={r?.nh} rl={r?.rl} dm={r?.dm} bid={r?.bid} d={r?.d} ni={r?.ni} nq={r?.nq}
                   customer={r?.customer} phone={r?.phone} comments={r?.comments} cb={r?.cb}
                   onSet={onSet} onCreate={onCreate} onRemove={onRemove} />
               );
@@ -136,7 +143,7 @@ export default function StreetSheet({ user }) {
 
       <div className="row between" style={{ marginTop: 10, flexWrap: "wrap", gap: 10 }}>
         <p className="muted" style={{ fontSize: 12, margin: 0 }}>
-          <b>Key:</b> NH Not Home · RL Reloop · DM Decision Maker · B/ID Bill or ID · D Deal (→ My Deals) · NI Not Interested · CB Call Back
+          <b>Key:</b> NH Not Home · RL Reloop · DM Decision Maker · B/ID Bill or ID · D Deal (→ My Deals) · NI Not Interested · NQ Not Qualified · CB Call Back
         </p>
         <button className="btn sm" onClick={() => setExtraSlots((x) => x + 50)}>+ 50 more slots</button>
       </div>

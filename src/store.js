@@ -46,6 +46,7 @@ export const SHEET_COLS = [
   { key: "bid", lab: "B/ID", title: "Bill or ID" },
   { key: "d", lab: "D", title: "Deal" },
   { key: "ni", lab: "NI", title: "Not Interested" },
+  { key: "nq", lab: "NQ", title: "Not Qualified" },
 ];
 
 // ---------- seed (demo) ----------
@@ -367,7 +368,7 @@ export function repAccountability(repId) {
   else if (t.length > 1) mins = Math.round((t[t.length - 1].ts - t[0].ts) / 60000);
   const u = state.users.find((x) => x.id === repId);
   const today = localDayInTZ(u?.timezone);
-  const doors = state.streetRows.filter((r) => r.repId === repId && r.date === today && (r.nh || r.rl || r.dm || r.bid || r.d || r.ni || r.street)).length;
+  const doors = state.streetRows.filter((r) => r.repId === repId && r.date === today && (r.nh || r.rl || r.dm || r.bid || r.d || r.ni || r.nq || r.street)).length;
   return { mins, doors, points: t.length, online: !!p.online, consent: p.consent };
 }
 
@@ -396,7 +397,7 @@ export function repGeofenceStatus(repId) {
 
 // ---------- street sheet ----------
 export function addStreetRow({ repId, date, ...init }) {
-  const r = { id: uid(), repId, date, street: "", nh: false, rl: false, dm: false, bid: false, d: false, ni: false, customer: "", comments: "", cb: "", phone: "", createdAt: Date.now(), done: false, snoozeUntil: 0, dealId: null, ...init };
+  const r = { id: uid(), repId, date, street: "", nh: false, rl: false, dm: false, bid: false, d: false, ni: false, nq: false, customer: "", comments: "", cb: "", phone: "", createdAt: Date.now(), done: false, snoozeUntil: 0, dealId: null, ...init };
   state.streetRows.push(r);
   if (r.d) linkStreetDeal(r); // created already marked sold
   emit(); push("street_rows", r); return r;
@@ -442,7 +443,7 @@ export function dayStats(repId) {
   const today = localDayInTZ(u?.timezone);
   const rows = state.streetRows.filter((r) => r.repId === repId && r.date === today);
   const t = sheetTotals(rows);
-  const contacts = rows.filter((r) => r.dm || r.bid || r.d || r.ni).length;
+  const contacts = rows.filter((r) => r.dm || r.bid || r.d || r.ni || r.nq).length;
   const rate = contacts ? Math.round((t.d / contacts) * 100) : 0;
   return { ...t, contacts, rate };
 }
@@ -486,7 +487,7 @@ export function dueNudges(repId) {
 
 // Tally the six columns (+ CB and total doors) for a set of rows.
 export function sheetTotals(rows) {
-  const t = { doors: rows.length, nh: 0, rl: 0, dm: 0, bid: 0, d: 0, ni: 0, cb: 0 };
+  const t = { doors: rows.length, nh: 0, rl: 0, dm: 0, bid: 0, d: 0, ni: 0, nq: 0, cb: 0 };
   rows.forEach((r) => {
     SHEET_COLS.forEach((c) => { if (r[c.key]) t[c.key]++; });
     if (r.cb) t.cb++;

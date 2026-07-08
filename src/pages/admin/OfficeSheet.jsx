@@ -45,7 +45,7 @@ export default function OfficeSheet() {
   };
 
   const exportCSV = () => downloadCSV(`office-${scope === "day" ? date : "all"}.csv`, perRep.map(({ rep, ...t }) => ({
-    Rep: rep.name, Doors: t.doors, NH: t.nh, RL: t.rl, DM: t.dm, "B/ID": t.bid, D: t.d, NI: t.ni, CB: t.cb,
+    Rep: rep.name, Doors: t.doors, NH: t.nh, RL: t.rl, DM: t.dm, "B/ID": t.bid, D: t.d, NI: t.ni, NQ: t.nq, CB: t.cb,
   })));
 
   return (
