@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, memo } from "react";
+import { useState, useCallback, useEffect, useRef, memo } from "react";
 import { useStore, getState, SHEET_COLS, addStreetRow, updateStreetRow, removeStreetRow, sheetTotals, submitDay, reopenDay, isDaySubmitted, activeProducts, updateDeal } from "../../store";
 import { localDay } from "../../lib/date.js";
 
@@ -91,6 +91,17 @@ export default function StreetSheet({ user }) {
   const [date, setDate] = useState(today());
   const [extraSlots, setExtraSlots] = useState(0);
   useEffect(() => { setExtraSlots(0); }, [date]);
+  const autoToday = useRef(true); // false once the rep explicitly picks a different date
+
+  // Keep the sheet pinned to the real current day even if the tab is left
+  // open across midnight -- otherwise every door logged after midnight
+  // keeps silently landing on yesterday's date instead of today's.
+  useEffect(() => {
+    const check = () => { if (autoToday.current) setDate((d) => (d === today() ? d : today())); };
+    const id = setInterval(check, 60000);
+    document.addEventListener("visibilitychange", check);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", check); };
+  }, []);
 
   const rows = state.streetRows.filter((r) => r.repId === user.id && r.date === date);
   const t = sheetTotals(rows);
@@ -124,7 +135,7 @@ export default function StreetSheet({ user }) {
         </div>
         <div className="row">
           <label className="field" style={{ margin: 0 }}>
-            <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ width: "auto" }} />
+            <input className="input" type="date" value={date} onChange={(e) => { autoToday.current = false; setDate(e.target.value); }} style={{ width: "auto" }} />
           </label>
           {submitted
             ? <><span className="pill"><span className="dot" style={{ background: "var(--green)" }} /> Submitted</span><button className="btn" onClick={() => reopenDay(user.id, date)}>Reopen</button></>
