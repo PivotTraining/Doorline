@@ -292,6 +292,9 @@ tr.rep-row:hover .rep-link { text-decoration: underline; }
 .lp-hero .btn { padding: 12px 20px; font-size: 15px; }
 .lp-note { color: var(--muted); font-size: 13px; margin-top: 14px; }
 
+@keyframes knock-pulse { 0%, 20% { opacity: 0; transform: scale(0.7); } 45% { opacity: 1; transform: scale(1); } 75%, 100% { opacity: 0; transform: scale(1.15); } }
+.knock-pulse { transform-origin: 17px 16px; animation: knock-pulse 1.8s ease-in-out infinite; }
+
 .hero-mock { background: linear-gradient(160deg, var(--panel), var(--panel-2)); border: 1px solid var(--border); border-radius: 18px; box-shadow: 0 24px 60px rgba(10,25,50,.18); padding: 16px; }
 .hero-mock .mock-map { height: 180px; border-radius: 12px; background:
   radial-gradient(120px 80px at 30% 30%, var(--brand-soft), transparent 70%),
@@ -305,8 +308,15 @@ tr.rep-row:hover .rep-link { text-decoration: underline; }
 .hero-mock .kpi span { display: block; font-size: 11px; color: var(--muted); }
 .hero-pin { position: absolute; width: 14px; height: 14px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,.4); }
 
-.hero-shot { border: 1px solid var(--border); border-radius: 16px; overflow: hidden; box-shadow: 0 24px 60px rgba(10,25,50,.18); background: var(--panel); }
+.hero-shot { position: relative; }
+.hero-shot-frame { border: 1px solid var(--border); border-radius: 16px; overflow: hidden; box-shadow: 0 24px 60px rgba(10,25,50,.18); background: var(--panel); }
 .hero-shot img { width: 100%; height: auto; display: block; }
+.hero-shot-badge {
+  position: absolute; top: -16px; left: -16px; width: 56px; height: 56px; border-radius: 16px;
+  background: var(--panel); border: 1px solid var(--border); box-shadow: 0 10px 24px rgba(10,25,50,.16);
+  display: flex; align-items: center; justify-content: center;
+}
+@media (max-width: 860px) { .hero-shot-badge { display: none; } }
 .lp-shots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; margin-top: 30px; }
 .lp-shots .shot { margin: 0; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow); background: var(--panel); }
 .lp-shots .shot img { width: 100%; height: auto; display: block; border-bottom: 1px solid var(--border); }

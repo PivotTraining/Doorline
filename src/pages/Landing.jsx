@@ -1,6 +1,7 @@
 import { getState, useStore } from "../store";
 import { useTheme, toggleTheme } from "../theme.js";
 import Logo from "../components/Logo.jsx";
+import KnockIcon from "../components/KnockIcon.jsx";
 
 const FEATURES = [
   { ic: "🛰️", t: "GPS routes & accountability", d: "See where every rep actually worked — live routes on the map and hours-on vs. doors-knocked, even on doors they forgot to log." },
@@ -62,7 +63,7 @@ export default function Landing({ onEnter }) {
         {/* hero */}
         <section className="lp-hero">
           <div>
-            <span className="lp-eyebrow">📍 Field sales, finally organized</span>
+            <span className="lp-eyebrow"><KnockIcon size={16} /> Built for door-to-door, from the first knock</span>
             <h1>Know where your reps are. Close more doors.</h1>
             <p className="sub">Doorline is the door-to-door sales platform — live GPS routes, territory mapping, a digital street sheet, and a real-time office dashboard, all in one.</p>
             <div className="cta-row">
@@ -74,7 +75,10 @@ export default function Landing({ onEnter }) {
 
           {/* real product screenshot */}
           <div className="hero-shot">
-            <img src="/shots/office-sheet.jpg" alt="Doorline office dashboard — live rollup of every rep's street sheet" width="1280" height="820" />
+            <div className="hero-shot-badge"><KnockIcon size={30} /></div>
+            <div className="hero-shot-frame">
+              <img src="/shots/office-sheet.jpg" alt="Doorline office dashboard — live rollup of every rep's street sheet" width="1280" height="820" />
+            </div>
           </div>
         </section>
 
