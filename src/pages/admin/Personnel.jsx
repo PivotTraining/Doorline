@@ -14,6 +14,8 @@ export default function Personnel() {
   const [form, setForm] = useState(null); // {mode:'add'|'edit', data}
   const [err, setErr] = useState("");
   const [zipBusy, setZipBusy] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [created, setCreated] = useState(null); // {email, tempPassword} after a live add
 
   const open = (mode, data) => { setErr(""); setForm({ mode, data: data ? { timezone: "", homeZip: "", homeLat: null, homeLng: null, ...data } : blank() }); };
 
@@ -32,15 +34,20 @@ export default function Personnel() {
     }
   };
 
-  const submit = () => {
+  const submit = async () => {
     const d = form.data;
     if (!d.name.trim() || !d.email.trim()) return setErr("Name and email are required.");
     if (form.mode === "add") {
-      const r = addUser(d);
+      setBusy(true);
+      const r = await addUser(d);
+      setBusy(false);
       if (r.error) return setErr(r.error);
-    } else {
-      updateUser(d.id, { name: d.name, role: d.role, plan: Number(d.plan), territory: d.territory, timezone: d.timezone || null, homeZip: d.homeZip || null, homeLat: d.homeLat, homeLng: d.homeLng });
+      setForm(null);
+      // Live mode returns a temp password to hand to the new hire.
+      if (r.tempPassword) setCreated({ email: d.email, tempPassword: r.tempPassword });
+      return;
     }
+    updateUser(d.id, { name: d.name, role: d.role, plan: Number(d.plan), territory: d.territory, timezone: d.timezone || null, homeZip: d.homeZip || null, homeLat: d.homeLat, homeLng: d.homeLng });
     setForm(null);
   };
 
@@ -99,8 +106,8 @@ export default function Personnel() {
           onClose={() => setForm(null)}
           footer={
             <>
-              <button className="btn ghost" onClick={() => setForm(null)}>Cancel</button>
-              <button className="btn primary" onClick={submit}>{form.mode === "add" ? "Add" : "Save"}</button>
+              <button className="btn ghost" onClick={() => setForm(null)} disabled={busy}>Cancel</button>
+              <button className="btn primary" onClick={submit} disabled={busy}>{busy ? "Adding…" : form.mode === "add" ? "Add" : "Save"}</button>
             </>
           }
         >
@@ -160,10 +167,35 @@ export default function Personnel() {
           {form.mode === "add" && (
             <label className="field" style={{ marginBottom: 0 }}>
               <span>Temporary password</span>
-              <input className="input" value={form.data.pass} placeholder="defaults to “rep”"
+              <input className="input" value={form.data.pass} placeholder="Leave blank to generate one"
                 onChange={(e) => setForm({ ...form, data: { ...form.data, pass: e.target.value } })} />
+              <small className="muted">They sign in with this and their email. Leave blank and we'll generate a secure one to hand off.</small>
             </label>
           )}
+        </Modal>
+      )}
+
+      {created && (
+        <Modal
+          title="✅ Account created"
+          onClose={() => setCreated(null)}
+          footer={<button className="btn primary" onClick={() => setCreated(null)}>Done</button>}
+        >
+          <p style={{ marginTop: 0 }}>Share these sign-in details with them — this is the only time the password is shown.</p>
+          <label className="field">
+            <span>Email</span>
+            <input className="input" readOnly value={created.email} onFocus={(e) => e.target.select()} />
+          </label>
+          <label className="field" style={{ marginBottom: 8 }}>
+            <span>Temporary password</span>
+            <input className="input" readOnly value={created.tempPassword} onFocus={(e) => e.target.select()} style={{ fontFamily: "monospace" }} />
+          </label>
+          <button className="btn sm" onClick={() => { navigator.clipboard?.writeText(`Email: ${created.email}\nPassword: ${created.tempPassword}`); }}>
+            ⧉ Copy both
+          </button>
+          <p className="muted" style={{ fontSize: 12, marginTop: 12, marginBottom: 0 }}>
+            They can sign in on any device at this site. Ask them to change the password from their profile after first sign-in.
+          </p>
         </Modal>
       )}
     </>

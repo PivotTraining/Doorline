@@ -297,11 +297,23 @@ export function login(email, pass) {
 export function logout() { state.sessionId = null; emit(); }
 
 // ---------- personnel ----------
-export function addUser({ name, email, role, plan, territory, pass, timezone, homeZip, homeLat, homeLng }) {
+export async function addUser({ name, email, role, plan, territory, pass, timezone, homeZip, homeLat, homeLng }) {
   if (state.users.some(u => u.email.toLowerCase() === email.toLowerCase())) return { error: "Email already in use" };
   const free = role === "admin" || role === "owner" || role === "viewer";
+  const seat = free ? 0 : plan;
+  if (!DEMO) {
+    // Live: a profile must reference a real auth.users row, which only the
+    // service role can mint — so this goes through the create-team-member
+    // edge function, which returns a temp password to hand to the new hire.
+    const res = await sync.createTeamMember({ name, email, role, plan: seat, territory, timezone, homeZip, homeLat, homeLng });
+    if (res.error) return { error: res.error };
+    state.users.push({ id: res.id, name, email, role, status: "active", plan: seat, territory,
+      timezone: timezone || null, homeZip: homeZip || null, homeLat: homeLat ?? null, homeLng: homeLng ?? null });
+    emit();
+    return { tempPassword: res.tempPassword };
+  }
   const u = {
-    id: uid(), name, email, pass: pass || "rep", role, status: "active", plan: free ? 0 : plan, territory,
+    id: uid(), name, email, pass: pass || "rep", role, status: "active", plan: seat, territory,
     timezone: timezone || null, homeZip: homeZip || null, homeLat: homeLat ?? null, homeLng: homeLng ?? null,
   };
   state.users.push(u);

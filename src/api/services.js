@@ -50,6 +50,32 @@ export const upsertOrg       = (o)      => supabase.from("organizations").update
   home_zip: o.homeZip || null, home_lat: o.homeLat ?? null, home_lng: o.homeLng ?? null,
 }).eq("id", org());
 
+// Create a team member (owner/admin only). The browser can't create the
+// auth.users row a profile must reference, so this goes through a service-
+// role edge function that makes the auth user + profile atomically and
+// returns a temporary password for the admin to hand off.
+export const createTeamMember = async (payload) => {
+  const url = import.meta.env.VITE_SUPABASE_URL;
+  const { data } = await supabase.auth.getSession();
+  const res = await fetch(`${url}/functions/v1/create-team-member`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${data?.session?.access_token ?? ""}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const d = String(body.detail || body.error || "");
+    if (/registered|already exists|duplicate/i.test(d)) return { error: "That email already has an account." };
+    if (body.error === "forbidden") return { error: "Only an owner or admin can add people." };
+    return { error: d || "Could not create this user." };
+  }
+  return body; // { id, email, tempPassword }
+};
+
 // Transactional / aggregate work via RPC.
 export const recordActivity  = (homeId, type) => supabase.rpc("record_door_activity", { home_id: homeId, atype: type });
 export const assignTerritory = (tid, repId)   => supabase.rpc("assign_territory", { territory_id: tid, rep_id: repId });

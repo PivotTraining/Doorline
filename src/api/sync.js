@@ -29,6 +29,13 @@ export function del(table, id) {
   else if (table === "street_rows") safe(S.deleteStreetRow(id));
   else if (table === "deals") safe(S.deleteDeal(id));
 }
+// Not fire-and-forget: the caller needs the result (temp password / error).
+export async function createTeamMember(payload) {
+  if (!live()) return { error: "not_live" };
+  try { return await S.createTeamMember(payload); }
+  catch { return { error: "Could not reach the server. Check your connection and try again." }; }
+}
+
 export const activity = (homeId, type) => { if (live()) safe(S.recordActivity(homeId, type)); };
 export const consent = (granted) => { if (live()) safe(S.setConsentRpc(granted)); };
 export const assignTerritory = (tid, repId) => { if (live()) safe(S.assignTerritory(tid, repId)); };
