@@ -56,7 +56,20 @@ const Row = memo(function Row({ slot, id, street, nh, rl, dm, bid, d, ni, nq, cu
       <td><input className="input" style={pad} type="tel" value={cur.phone} placeholder="phone → nudge" autoComplete="off" onFocus={keepVisible} onChange={setText("phone")} /></td>
       <td><input className="input" style={pad} value={cur.comments} autoComplete="off" onFocus={keepVisible} onChange={setText("comments")} /></td>
       <td><input className="input" style={pad} value={cur.cb} placeholder="5:30" autoComplete="off" onFocus={keepVisible} onChange={setText("cb")} /></td>
-      <td>{isReal && <button className="x" title="Clear" onClick={() => { onRemove(id); setDraft(BLANK); }}>×</button>}</td>
+      <td style={{ paddingLeft: 10 }}>
+        {isReal && (
+          <button className="x" title="Clear" onClick={() => {
+            // The delete button sits right next to the CB field — on a phone
+            // a slightly-off tap while reaching for CB can land here instead
+            // and instantly wipe everything logged for the door. Anything
+            // with real content on it needs a confirm; a truly blank/never-
+            // touched row can still be cleared with one tap.
+            const hasContent = Object.values(cur).some((v) => (typeof v === "string" ? v.trim() : v));
+            if (hasContent && !confirm("Clear this door? This removes everything logged for it, including any callback time.")) return;
+            onRemove(id); setDraft(BLANK);
+          }}>×</button>
+        )}
+      </td>
     </tr>
   );
 });
