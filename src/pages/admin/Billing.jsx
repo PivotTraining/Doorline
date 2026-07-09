@@ -29,46 +29,50 @@ export default function Billing() {
       <div className="cards grid-2">
         <div className="card">
           <h3>By plan</h3>
-          <table className="tbl">
-            <thead><tr><th>Plan</th><th>Seats</th><th>Unit</th><th style={{ textAlign: "right" }}>Subtotal</th></tr></thead>
-            <tbody>
-              {Object.entries(tiers).map(([plan, n]) => (
-                <tr key={plan}>
-                  <td>{PLAN_NAME[plan]}</td>
-                  <td>{n}</td>
-                  <td className="muted">${(plan / 100).toFixed(0)}/mo</td>
-                  <td style={{ textAlign: "right", fontWeight: 600 }}>${((plan * n) / 100).toLocaleString()}</td>
-                </tr>
-              ))}
-              {seats.length === 0 && <tr><td colSpan={4} className="muted">No active billable seats.</td></tr>}
-            </tbody>
-            <tfoot>
-              <tr><td colSpan={3} style={{ textAlign: "right", fontWeight: 600 }}>Monthly total</td>
-                <td style={{ textAlign: "right", fontWeight: 700, color: "var(--green)" }}>${(monthly / 100).toLocaleString()}</td></tr>
-            </tfoot>
-          </table>
+          <div className="table-scroll">
+            <table className="tbl">
+              <thead><tr><th>Plan</th><th>Seats</th><th>Unit</th><th style={{ textAlign: "right" }}>Subtotal</th></tr></thead>
+              <tbody>
+                {Object.entries(tiers).map(([plan, n]) => (
+                  <tr key={plan}>
+                    <td>{PLAN_NAME[plan]}</td>
+                    <td>{n}</td>
+                    <td className="muted">${(plan / 100).toFixed(0)}/mo</td>
+                    <td style={{ textAlign: "right", fontWeight: 600 }}>${((plan * n) / 100).toLocaleString()}</td>
+                  </tr>
+                ))}
+                {seats.length === 0 && <tr><td colSpan={4} className="muted">No active billable seats.</td></tr>}
+              </tbody>
+              <tfoot>
+                <tr><td colSpan={3} style={{ textAlign: "right", fontWeight: 600 }}>Monthly total</td>
+                  <td style={{ textAlign: "right", fontWeight: 700, color: "var(--green)" }}>${(monthly / 100).toLocaleString()}</td></tr>
+              </tfoot>
+            </table>
+          </div>
         </div>
 
         <div className="card">
           <h3>Seat ledger</h3>
           <p className="muted" style={{ marginTop: 0 }}>Free seats (owner / admin / viewer) are never billed.</p>
-          <table className="tbl">
-            <thead><tr><th>Person</th><th>Plan</th><th>Status</th></tr></thead>
-            <tbody>
-              {state.users.map((u) => (
-                <tr key={u.id}>
-                  <td>{u.name}</td>
-                  <td className="muted">{PLAN_NAME[u.plan] || "Free"}</td>
-                  <td>
-                    <span className="pill">
-                      <span className="dot" style={{ background: u.status === "active" ? "var(--green)" : "var(--muted)" }} />
-                      {u.plan > 0 ? (u.status === "active" ? "billed" : "paused") : "free"}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="tbl">
+              <thead><tr><th>Person</th><th>Plan</th><th>Status</th></tr></thead>
+              <tbody>
+                {state.users.map((u) => (
+                  <tr key={u.id}>
+                    <td>{u.name}</td>
+                    <td className="muted">{PLAN_NAME[u.plan] || "Free"}</td>
+                    <td>
+                      <span className="pill">
+                        <span className="dot" style={{ background: u.status === "active" ? "var(--green)" : "var(--muted)" }} />
+                        {u.plan > 0 ? (u.status === "active" ? "billed" : "paused") : "free"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           {inactive.length > 0 && <p className="muted" style={{ fontSize: 13 }}>{inactive.length} paused seat(s) excluded from billing.</p>}
         </div>
       </div>

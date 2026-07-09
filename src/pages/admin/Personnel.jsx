@@ -59,36 +59,38 @@ export default function Personnel() {
       </div>
 
       <div className="card">
-        <table className="tbl">
-          <thead>
-            <tr><th>Name</th><th>Email</th><th>Role</th><th>Territory</th><th>Home ZIP</th><th>Plan</th><th>Status</th><th></th></tr>
-          </thead>
-          <tbody>
-            {state.users.map((u) => (
-              <tr key={u.id}>
-                <td>{u.name}</td>
-                <td className="muted">{u.email}</td>
-                <td><span className="tag">{ROLE_LABEL[u.role]}</span></td>
-                <td className="muted">{u.territory}</td>
-                <td className="muted">{u.homeZip || "—"}</td>
-                <td className="muted">{PLAN_NAME[u.plan] || "—"}{u.plan > 0 ? ` · $${(u.plan / 100).toFixed(0)}` : ""}</td>
-                <td>
-                  <span className="pill">
-                    <span className="dot" style={{ background: u.status === "active" ? "var(--green)" : "var(--muted)" }} />
-                    {u.status}
-                  </span>
-                </td>
-                <td>
-                  <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
-                    <button className="btn sm" onClick={() => open("edit", u)}>Edit</button>
-                    <button className="btn sm" onClick={() => toggleStatus(u.id)}>{u.status === "active" ? "Deactivate" : "Activate"}</button>
-                    <button className="btn sm danger" onClick={() => { if (confirm(`Remove ${u.name}?`)) removeUser(u.id); }}>Remove</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="table-scroll">
+          <table className="tbl">
+            <thead>
+              <tr><th>Name</th><th>Email</th><th>Role</th><th>Territory</th><th>Home ZIP</th><th>Plan</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody>
+              {state.users.map((u) => (
+                <tr key={u.id}>
+                  <td>{u.name}</td>
+                  <td className="muted">{u.email}</td>
+                  <td><span className="tag">{ROLE_LABEL[u.role]}</span></td>
+                  <td className="muted">{u.territory}</td>
+                  <td className="muted">{u.homeZip || "—"}</td>
+                  <td className="muted">{PLAN_NAME[u.plan] || "—"}{u.plan > 0 ? ` · $${(u.plan / 100).toFixed(0)}` : ""}</td>
+                  <td>
+                    <span className="pill">
+                      <span className="dot" style={{ background: u.status === "active" ? "var(--green)" : "var(--muted)" }} />
+                      {u.status}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
+                      <button className="btn sm" onClick={() => open("edit", u)}>Edit</button>
+                      <button className="btn sm" onClick={() => toggleStatus(u.id)}>{u.status === "active" ? "Deactivate" : "Activate"}</button>
+                      <button className="btn sm danger" onClick={() => { if (confirm(`Remove ${u.name}?`)) removeUser(u.id); }}>Remove</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {form && (

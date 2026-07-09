@@ -30,25 +30,27 @@ export default function Leaderboard({ user }) {
       </div>
 
       <div className="card">
-        <table className="tbl">
-          <thead>
-            <tr><th>#</th><th>Rep</th><th>Doors</th><th>Convos</th><th>Appts</th><th>Sales</th><th>Close %</th><th style={{ textAlign: "right" }}>Revenue</th></tr>
-          </thead>
-          <tbody>
-            {reps.map((r, i) => (
-              <tr key={r.id} style={r.id === user.id ? { background: "var(--panel-2)" } : undefined}>
-                <td style={{ fontSize: 18 }}>{medal(i)}</td>
-                <td>{r.name}{r.id === user.id && <span className="tag" style={{ marginLeft: 8 }}>you</span>}</td>
-                <td>{r.knocks}</td>
-                <td>{r.contacts}</td>
-                <td>{r.appts}</td>
-                <td>{r.closes}</td>
-                <td>{r.rate}%</td>
-                <td style={{ textAlign: "right", color: "var(--green)", fontWeight: 600 }}>${r.revenue.toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="table-scroll">
+          <table className="tbl">
+            <thead>
+              <tr><th>#</th><th>Rep</th><th>Doors</th><th>Convos</th><th>Appts</th><th>Sales</th><th>Close %</th><th style={{ textAlign: "right" }}>Revenue</th></tr>
+            </thead>
+            <tbody>
+              {reps.map((r, i) => (
+                <tr key={r.id} style={r.id === user.id ? { background: "var(--panel-2)" } : undefined}>
+                  <td style={{ fontSize: 18 }}>{medal(i)}</td>
+                  <td>{r.name}{r.id === user.id && <span className="tag" style={{ marginLeft: 8 }}>you</span>}</td>
+                  <td>{r.knocks}</td>
+                  <td>{r.contacts}</td>
+                  <td>{r.appts}</td>
+                  <td>{r.closes}</td>
+                  <td>{r.rate}%</td>
+                  <td style={{ textAlign: "right", color: "var(--green)", fontWeight: 600 }}>${r.revenue.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </>
   );

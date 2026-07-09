@@ -77,37 +77,39 @@ export default function OfficeSheet() {
 
       <div className="card">
         <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>{perRep.length} rep{perRep.length === 1 ? "" : "s"} · tap a name to see their doors</p>
-        <table className="tbl">
-          <thead>
-            <tr>
-              <th>Rep</th>
-              <th style={{ textAlign: "center" }}>Doors</th>
-              {SHEET_COLS.map((c) => <th key={c.key} title={c.title} style={{ textAlign: "center" }}>{c.lab}</th>)}
-              <th style={{ textAlign: "center" }}>CB</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {perRep.map(({ rep, ...t }) => (
-              <tr key={rep.id} className="rep-row" onClick={() => setOpenRep(rep)}>
-                <td><span className="rep-link">{rep.name}</span></td>
-                <td style={{ textAlign: "center" }}>{t.doors}</td>
-                {SHEET_COLS.map((c) => <td key={c.key} style={{ textAlign: "center", color: c.key === "d" && t.d ? "var(--green)" : undefined, fontWeight: c.key === "d" && t.d ? 600 : 400 }}>{t[c.key]}</td>)}
-                <td style={{ textAlign: "center" }}>{t.cb}</td>
-                <td className="muted" style={{ textAlign: "right", fontSize: 12 }}>Details →</td>
+        <div className="table-scroll">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Rep</th>
+                <th style={{ textAlign: "center" }}>Doors</th>
+                {SHEET_COLS.map((c) => <th key={c.key} title={c.title} style={{ textAlign: "center" }}>{c.lab}</th>)}
+                <th style={{ textAlign: "center" }}>CB</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr style={{ fontWeight: 700 }}>
-              <td>Office total</td>
-              <td style={{ textAlign: "center" }}>{grand.doors}</td>
-              {SHEET_COLS.map((c) => <td key={c.key} style={{ textAlign: "center" }}>{grand[c.key]}</td>)}
-              <td style={{ textAlign: "center" }}>{grand.cb}</td>
-              <td></td>
-            </tr>
-          </tfoot>
-        </table>
+            </thead>
+            <tbody>
+              {perRep.map(({ rep, ...t }) => (
+                <tr key={rep.id} className="rep-row" onClick={() => setOpenRep(rep)}>
+                  <td><span className="rep-link">{rep.name}</span></td>
+                  <td style={{ textAlign: "center" }}>{t.doors}</td>
+                  {SHEET_COLS.map((c) => <td key={c.key} style={{ textAlign: "center", color: c.key === "d" && t.d ? "var(--green)" : undefined, fontWeight: c.key === "d" && t.d ? 600 : 400 }}>{t[c.key]}</td>)}
+                  <td style={{ textAlign: "center" }}>{t.cb}</td>
+                  <td className="muted" style={{ textAlign: "right", fontSize: 12 }}>Details →</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr style={{ fontWeight: 700 }}>
+                <td>Office total</td>
+                <td style={{ textAlign: "center" }}>{grand.doors}</td>
+                {SHEET_COLS.map((c) => <td key={c.key} style={{ textAlign: "center" }}>{grand[c.key]}</td>)}
+                <td style={{ textAlign: "center" }}>{grand.cb}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </div>
 
       {openRep && (
@@ -145,32 +147,34 @@ function RepDetail({ rep, rows, scope, date, onClose }) {
         dates.map((d) => (
           <div key={d} style={{ marginBottom: 16 }}>
             {scope === "all" && <div className="muted" style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", margin: "0 0 8px" }}>{fmtDate(d)}</div>}
-            <table className="tbl">
-              <thead>
-                <tr><th style={{ width: 34 }}>#</th><th>Street</th><th>Disposition</th><th>Contact</th><th>Notes</th></tr>
-              </thead>
-              <tbody>
-                {byDate[d].map((r) => (
-                  <tr key={r.id}>
-                    <td className="muted">{r.slot ?? "—"}</td>
-                    <td>{r.street || <span className="muted">—</span>}</td>
-                    <td>
-                      <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
-                        {SHEET_COLS.filter((c) => r[c.key]).map((c) => (
-                          <span key={c.key} className="tag" title={c.title} style={c.key === "d" ? { borderColor: "var(--green)", color: "var(--green)" } : undefined}>{c.lab}</span>
-                        ))}
-                        {!SHEET_COLS.some((c) => r[c.key]) && <span className="muted">—</span>}
-                      </div>
-                    </td>
-                    <td className="muted" style={{ fontSize: 13 }}>
-                      {r.customer || ""}{r.customer && r.phone ? " · " : ""}{r.phone || ""}
-                      {r.cb && <div>CB {r.cb}</div>}
-                    </td>
-                    <td className="muted" style={{ fontSize: 13, maxWidth: 180 }}>{r.comments || "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="tbl">
+                <thead>
+                  <tr><th style={{ width: 34 }}>#</th><th>Street</th><th>Disposition</th><th>Contact</th><th>Notes</th></tr>
+                </thead>
+                <tbody>
+                  {byDate[d].map((r) => (
+                    <tr key={r.id}>
+                      <td className="muted">{r.slot ?? "—"}</td>
+                      <td>{r.street || <span className="muted">—</span>}</td>
+                      <td>
+                        <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+                          {SHEET_COLS.filter((c) => r[c.key]).map((c) => (
+                            <span key={c.key} className="tag" title={c.title} style={c.key === "d" ? { borderColor: "var(--green)", color: "var(--green)" } : undefined}>{c.lab}</span>
+                          ))}
+                          {!SHEET_COLS.some((c) => r[c.key]) && <span className="muted">—</span>}
+                        </div>
+                      </td>
+                      <td className="muted" style={{ fontSize: 13 }}>
+                        {r.customer || ""}{r.customer && r.phone ? " · " : ""}{r.phone || ""}
+                        {r.cb && <div>CB {r.cb}</div>}
+                      </td>
+                      <td className="muted" style={{ fontSize: 13, maxWidth: 180 }}>{r.comments || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         ))
       )}

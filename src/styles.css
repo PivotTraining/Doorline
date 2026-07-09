@@ -184,6 +184,12 @@ label.field > span { display: block; font-size: 13px; color: var(--muted); margi
 }
 .sheet-row-blank { opacity: 0.88; }
 
+/* Any wide .tbl table sitting directly in a .card has no scroll boundary of
+   its own, so on a narrow viewport the overflow bubbles all the way up to
+   the page — the whole app (sidebar included) scrolls sideways together
+   instead of just the table. Wrap the table in this to contain it. */
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+
 /* ---------- pull-to-refresh ---------- */
 .pull-indicator {
   position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 60;

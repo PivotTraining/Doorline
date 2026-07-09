@@ -32,34 +32,36 @@ export default function MyDeals({ user }) {
         {deals.length === 0 ? (
           <p className="muted">No deals yet. Mark “D” on the Street Sheet or “Sold” on a door to capture one.</p>
         ) : (
-          <table className="tbl">
-            <thead><tr><th>Customer</th><th>Product</th><th>Address</th><th style={{ width: 150 }}>Value ($)</th><th style={{ width: 100 }}>When</th></tr></thead>
-            <tbody>
-              {deals.map((d) => {
-                const isThisWeek = (d.ts || 0) >= weekCutoff;
-                return (
-                  <tr key={d.id}>
-                    <td><input className="input" style={{ padding: "6px 8px" }} value={d.customer || ""} onChange={(e) => updateDeal(d.id, { customer: e.target.value })} /></td>
-                    <td>
-                      <select className="select" style={{ padding: "6px 8px" }} value={d.product || products[0]} onChange={(e) => updateDeal(d.id, { product: e.target.value })}>
-                        {products.map((p) => <option key={p}>{p}</option>)}
-                      </select>
-                    </td>
-                    <td className="muted">{d.addr || "—"}</td>
-                    <td>
-                      <input className="input" style={{ padding: "6px 8px" }} type="number" min="0" value={d.value || 0}
-                        onChange={(e) => updateDeal(d.id, { value: Math.max(0, Number(e.target.value) || 0) })} />
-                    </td>
-                    <td>
-                      {isThisWeek
-                        ? <span className="tag" style={{ borderColor: "var(--brand)", color: "var(--brand)" }}>This week</span>
-                        : <span className="muted" style={{ fontSize: 12 }}>{new Date(d.ts || Date.now()).toLocaleDateString([], { month: "short", day: "numeric" })}</span>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="tbl">
+              <thead><tr><th>Customer</th><th>Product</th><th>Address</th><th style={{ width: 150 }}>Value ($)</th><th style={{ width: 100 }}>When</th></tr></thead>
+              <tbody>
+                {deals.map((d) => {
+                  const isThisWeek = (d.ts || 0) >= weekCutoff;
+                  return (
+                    <tr key={d.id}>
+                      <td><input className="input" style={{ padding: "6px 8px" }} value={d.customer || ""} onChange={(e) => updateDeal(d.id, { customer: e.target.value })} /></td>
+                      <td>
+                        <select className="select" style={{ padding: "6px 8px" }} value={d.product || products[0]} onChange={(e) => updateDeal(d.id, { product: e.target.value })}>
+                          {products.map((p) => <option key={p}>{p}</option>)}
+                        </select>
+                      </td>
+                      <td className="muted">{d.addr || "—"}</td>
+                      <td>
+                        <input className="input" style={{ padding: "6px 8px" }} type="number" min="0" value={d.value || 0}
+                          onChange={(e) => updateDeal(d.id, { value: Math.max(0, Number(e.target.value) || 0) })} />
+                      </td>
+                      <td>
+                        {isThisWeek
+                          ? <span className="tag" style={{ borderColor: "var(--brand)", color: "var(--brand)" }}>This week</span>
+                          : <span className="muted" style={{ fontSize: 12 }}>{new Date(d.ts || Date.now()).toLocaleDateString([], { month: "short", day: "numeric" })}</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </>

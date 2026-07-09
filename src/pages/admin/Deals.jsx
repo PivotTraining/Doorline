@@ -45,19 +45,21 @@ export default function Deals() {
           {state.deals.length === 0 ? (
             <p className="muted">No deals closed yet.</p>
           ) : (
-            <table className="tbl">
-              <thead><tr><th>Customer</th><th>Rep</th><th>Product</th><th style={{ textAlign: "right" }}>Value</th></tr></thead>
-              <tbody>
-                {state.deals.map((d) => (
-                  <tr key={d.id}>
-                    <td>{d.customer}</td>
-                    <td className="muted">{name(d.repId)}</td>
-                    <td className="muted">{d.product}</td>
-                    <td style={{ textAlign: "right", color: "var(--green)", fontWeight: 600 }}>${(d.value || 0).toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="table-scroll">
+              <table className="tbl">
+                <thead><tr><th>Customer</th><th>Rep</th><th>Product</th><th style={{ textAlign: "right" }}>Value</th></tr></thead>
+                <tbody>
+                  {state.deals.map((d) => (
+                    <tr key={d.id}>
+                      <td>{d.customer}</td>
+                      <td className="muted">{name(d.repId)}</td>
+                      <td className="muted">{d.product}</td>
+                      <td style={{ textAlign: "right", color: "var(--green)", fontWeight: 600 }}>${(d.value || 0).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 

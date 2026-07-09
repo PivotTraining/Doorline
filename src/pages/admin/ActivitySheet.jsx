@@ -44,23 +44,25 @@ export default function ActivitySheet() {
         {rows.length === 0 ? (
           <p className="muted">No activity matches these filters.</p>
         ) : (
-          <table className="tbl">
-            <thead>
-              <tr><th>Rep</th><th>Address</th><th>Outcome</th><th>Contact</th><th>Due</th><th>Notes</th></tr>
-            </thead>
-            <tbody>
-              {rows.map((h) => (
-                <tr key={h.id}>
-                  <td>{name(h.repId)}</td>
-                  <td>{h.addr}</td>
-                  <td><span className="pill"><span className="dot" style={{ background: DISPOS[h.status].hex }} /> {DISPOS[h.status].lab}</span></td>
-                  <td className="muted">{h.contact || "—"}{h.phone ? ` · ${h.phone}` : ""}</td>
-                  <td className="muted">{h.due || "—"}</td>
-                  <td className="muted" style={{ maxWidth: 280 }}>{h.notes || "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="tbl">
+              <thead>
+                <tr><th>Rep</th><th>Address</th><th>Outcome</th><th>Contact</th><th>Due</th><th>Notes</th></tr>
+              </thead>
+              <tbody>
+                {rows.map((h) => (
+                  <tr key={h.id}>
+                    <td>{name(h.repId)}</td>
+                    <td>{h.addr}</td>
+                    <td><span className="pill"><span className="dot" style={{ background: DISPOS[h.status].hex }} /> {DISPOS[h.status].lab}</span></td>
+                    <td className="muted">{h.contact || "—"}{h.phone ? ` · ${h.phone}` : ""}</td>
+                    <td className="muted">{h.due || "—"}</td>
+                    <td className="muted" style={{ maxWidth: 280 }}>{h.notes || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </>

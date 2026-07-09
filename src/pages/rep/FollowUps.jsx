@@ -39,20 +39,22 @@ export default function FollowUps({ user }) {
           return (
             <div key={b} className="card" style={{ marginBottom: 14 }}>
               <h3 style={{ color: b === "Overdue" ? "var(--red)" : b === "Today" ? "var(--amber)" : undefined }}>{b} ({rows.length})</h3>
-              <table className="tbl">
-                <thead><tr><th>Address</th><th>Outcome</th><th>Contact</th><th>Due</th><th></th></tr></thead>
-                <tbody>
-                  {rows.map((h) => (
-                    <tr key={h.id}>
-                      <td>{h.addr}</td>
-                      <td><span className="pill"><span className="dot" style={{ background: DISPOS[h.status].hex }} /> {DISPOS[h.status].lab}</span></td>
-                      <td className="muted">{h.contact || "—"}{h.phone ? ` · ${h.phone}` : ""}</td>
-                      <td className="muted">{h.due || "—"}</td>
-                      <td><button className="btn sm" onClick={() => setEdit(h)}>Update</button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="table-scroll">
+                <table className="tbl">
+                  <thead><tr><th>Address</th><th>Outcome</th><th>Contact</th><th>Due</th><th></th></tr></thead>
+                  <tbody>
+                    {rows.map((h) => (
+                      <tr key={h.id}>
+                        <td>{h.addr}</td>
+                        <td><span className="pill"><span className="dot" style={{ background: DISPOS[h.status].hex }} /> {DISPOS[h.status].lab}</span></td>
+                        <td className="muted">{h.contact || "—"}{h.phone ? ` · ${h.phone}` : ""}</td>
+                        <td className="muted">{h.due || "—"}</td>
+                        <td><button className="btn sm" onClick={() => setEdit(h)}>Update</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           );
         })
