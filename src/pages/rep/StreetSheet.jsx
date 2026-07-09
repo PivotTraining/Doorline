@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, memo } from "react";
-import { useStore, getState, SHEET_COLS, addStreetRow, updateStreetRow, removeStreetRow, sheetTotals, submitDay, reopenDay, isDaySubmitted } from "../../store";
+import { useStore, getState, SHEET_COLS, addStreetRow, updateStreetRow, removeStreetRow, sheetTotals, submitDay, reopenDay, isDaySubmitted, activeProducts, updateDeal } from "../../store";
 import { localDay } from "../../lib/date.js";
 
 const SLOTS = 100;
@@ -22,7 +22,7 @@ const BLANK = { street: "", customer: "", phone: "", comments: "", cb: "" };
 // see it happen. Nudge the field into view whenever it gains focus.
 const keepVisible = (e) => { e.target.scrollIntoView({ block: "nearest", inline: "nearest" }); };
 
-const Row = memo(function Row({ slot, id, street, nh, rl, dm, bid, d, ni, nq, customer, phone, comments, cb, onSet, onCreate, onRemove }) {
+const Row = memo(function Row({ slot, id, street, nh, rl, dm, bid, d, ni, nq, customer, phone, comments, cb, dealId, product, products, onSet, onCreate, onRemove, onSetProduct }) {
   const [draft, setDraft] = useState(BLANK);
   const isReal = !!id;
   const cur = isReal ? { street, customer, phone, comments, cb, nh, rl, dm, bid, d, ni, nq } : draft;
@@ -50,6 +50,17 @@ const Row = memo(function Row({ slot, id, street, nh, rl, dm, bid, d, ni, nq, cu
       {SHEET_COLS.map((c) => (
         <td key={c.key} style={cellStyle}>
           <input type="checkbox" checked={!!cur[c.key]} onChange={setFlag(c.key)} style={{ width: 18, height: 18, accentColor: "var(--brand)" }} />
+          {c.key === "d" && cur.d && dealId && (
+            <select
+              className="select"
+              value={product || products[0]}
+              onChange={(e) => onSetProduct(dealId, e.target.value)}
+              title="What did you sell?"
+              style={{ display: "block", marginTop: 4, fontSize: 10, padding: "2px 3px", width: 62 }}
+            >
+              {products.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          )}
         </td>
       ))}
       <td><input className="input" style={pad} value={cur.customer} autoComplete="off" onFocus={keepVisible} onChange={setText("customer")} /></td>
@@ -84,10 +95,13 @@ export default function StreetSheet({ user }) {
   const rows = state.streetRows.filter((r) => r.repId === user.id && r.date === date);
   const t = sheetTotals(rows);
   const submitted = isDaySubmitted(user.id, date);
+  const products = activeProducts();
+  const dealsById = Object.fromEntries(state.deals.map((d) => [d.id, d]));
 
   const onSet = useCallback((id, patch) => updateStreetRow(id, patch), []);
   const onRemove = useCallback((id) => removeStreetRow(id), []);
   const onCreate = useCallback((slot, patch) => addStreetRow({ repId: user.id, date, slot, ...patch }), [user.id, date]);
+  const onSetProduct = useCallback((dealId, product) => updateDeal(dealId, { product }), []);
 
   // Place worked rows by their slot; lay everything else out across the grid.
   const bySlot = {};
@@ -125,6 +139,7 @@ export default function StreetSheet({ user }) {
         <div className="card stat"><div className="n">{t.ni}</div><div className="l">Not interested</div></div>
       </div>
 
+      <p className="sheet-swipe-hint">↔ Swipe sideways to see Customer, Phone, Comments, and Call Back</p>
       <div className="card sheet-scroll" style={{ opacity: submitted ? 0.85 : 1, padding: 0 }}>
         <table className="tbl sheet-tbl" style={{ minWidth: 820 }}>
           <thead>
@@ -147,7 +162,8 @@ export default function StreetSheet({ user }) {
                 <Row key={slot} slot={slot}
                   id={r?.id} street={r?.street} nh={r?.nh} rl={r?.rl} dm={r?.dm} bid={r?.bid} d={r?.d} ni={r?.ni} nq={r?.nq}
                   customer={r?.customer} phone={r?.phone} comments={r?.comments} cb={r?.cb}
-                  onSet={onSet} onCreate={onCreate} onRemove={onRemove} />
+                  dealId={r?.dealId} product={r?.dealId ? dealsById[r.dealId]?.product : undefined} products={products}
+                  onSet={onSet} onCreate={onCreate} onRemove={onRemove} onSetProduct={onSetProduct} />
               );
             })}
           </tbody>

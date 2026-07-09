@@ -151,7 +151,15 @@ label.field > span { display: block; font-size: 13px; color: var(--muted); margi
 .page-head p { margin: 4px 0 0; color: var(--muted); }
 
 /* ---------- street sheet (sticky header) ---------- */
-.sheet-scroll { max-height: 70vh; overflow: auto; border-radius: var(--radius); }
+.sheet-scroll {
+  max-height: 70vh; overflow: auto; border-radius: var(--radius);
+  -webkit-overflow-scrolling: touch; /* momentum scroll on iOS */
+  overscroll-behavior: contain; /* swiping the sheet shouldn't drag the page behind it */
+}
+.sheet-swipe-hint { display: none; }
+@media (max-width: 860px) {
+  .sheet-swipe-hint { display: block; font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+}
 /* border-collapse breaks position:sticky on th in Chromium, so this table
    uses separate borders (row lines drawn via box-shadow) instead of .tbl's
    collapsed borders. */

@@ -1,10 +1,11 @@
-import { useStore, getState, updateDeal, PRODUCTS } from "../../store";
+import { useStore, getState, updateDeal, activeProducts } from "../../store";
 
 const WEEK_MS = 7 * 86400e3;
 
 export default function MyDeals({ user }) {
   useStore();
   const state = getState();
+  const products = activeProducts();
   const deals = state.deals.filter((d) => d.repId === user.id).sort((a, b) => (b.ts || 0) - (a.ts || 0));
   const total = deals.reduce((a, d) => a + (d.value || 0), 0);
   const weekCutoff = Date.now() - WEEK_MS;
@@ -40,8 +41,8 @@ export default function MyDeals({ user }) {
                   <tr key={d.id}>
                     <td><input className="input" style={{ padding: "6px 8px" }} value={d.customer || ""} onChange={(e) => updateDeal(d.id, { customer: e.target.value })} /></td>
                     <td>
-                      <select className="select" style={{ padding: "6px 8px" }} value={d.product || PRODUCTS[0]} onChange={(e) => updateDeal(d.id, { product: e.target.value })}>
-                        {PRODUCTS.map((p) => <option key={p}>{p}</option>)}
+                      <select className="select" style={{ padding: "6px 8px" }} value={d.product || products[0]} onChange={(e) => updateDeal(d.id, { product: e.target.value })}>
+                        {products.map((p) => <option key={p}>{p}</option>)}
                       </select>
                     </td>
                     <td className="muted">{d.addr || "—"}</td>

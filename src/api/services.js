@@ -22,8 +22,9 @@ export async function loadAll() {
   ]);
   return {
     org: o.data
-      ? { name: o.data.name, logo: o.data.logo_path, homeZip: o.data.home_zip || null, homeLat: o.data.home_lat ?? null, homeLng: o.data.home_lng ?? null }
-      : { name: "Doorline", logo: null, homeZip: null, homeLat: null, homeLng: null },
+      ? { name: o.data.name, logo: o.data.logo_path, homeZip: o.data.home_zip || null, homeLat: o.data.home_lat ?? null, homeLng: o.data.home_lng ?? null,
+          followup: o.data.followup || null, products: o.data.products || null }
+      : { name: "Doorline", logo: null, homeZip: null, homeLat: null, homeLng: null, followup: null, products: null },
     users: (profiles.data || []).map(M.profileFromRow),
     homes: (homes.data || []).map(M.homeFromRow),
     deals: (deals.data || []).map((r) => M.dealFromRow({ ...r, addr: r.homes?.addr })),
@@ -45,7 +46,7 @@ export const deleteTerritory = (id)     => supabase.from("territories").delete()
 export const upsertStreetRow = (r)      => supabase.from("street_rows").upsert(M.streetRowToRow(r, org()));
 export const deleteStreetRow = (id)     => supabase.from("street_rows").delete().eq("id", id);
 export const upsertOrg       = (o)      => supabase.from("organizations").update({
-  name: o.name, logo_path: o.logo, followup: o.followup,
+  name: o.name, logo_path: o.logo, followup: o.followup, products: o.products,
   home_zip: o.homeZip || null, home_lat: o.homeLat ?? null, home_lng: o.homeLng ?? null,
 }).eq("id", org());
 

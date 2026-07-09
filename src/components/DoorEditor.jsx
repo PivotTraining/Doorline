@@ -1,6 +1,6 @@
 import { useState } from "react";
 import Modal from "./Modal.jsx";
-import { DISPOS, PRODUCTS, ACTIONS, ACTION_LAB, setDoor, logActivity } from "../store";
+import { DISPOS, activeProducts, ACTIONS, ACTION_LAB, setDoor, logActivity } from "../store";
 
 const fmtTime = (ts) => new Date(ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
@@ -9,12 +9,13 @@ const fmtTime = (ts) => new Date(ts).toLocaleTimeString([], { hour: "numeric", m
 const OUTCOMES = ["nothome", "callback", "appt", "notint", "sold", "dnc"];
 
 export default function DoorEditor({ door, onClose }) {
+  const products = activeProducts();
   const [status, setStatus] = useState(door.status === "untouched" ? "" : door.status);
   const [notes, setNotes] = useState(door.notes || "");
   const [contact, setContact] = useState(door.contact || "");
   const [phone, setPhone] = useState(door.phone || "");
   const [due, setDue] = useState(door.due || "");
-  const [deal, setDeal] = useState(door.deal || { customer: "", product: PRODUCTS[0], value: "" });
+  const [deal, setDeal] = useState(door.deal || { customer: "", product: products[0], value: "" });
   const [acts, setActs] = useState(door.activity || []);
 
   const quick = (key) => {
@@ -86,7 +87,7 @@ export default function DoorEditor({ door, onClose }) {
           <label className="field">
             <span>Product</span>
             <select className="select" value={deal.product} onChange={(e) => setDeal({ ...deal, product: e.target.value })}>
-              {PRODUCTS.map((p) => <option key={p}>{p}</option>)}
+              {products.map((p) => <option key={p}>{p}</option>)}
             </select>
           </label>
           <label className="field" style={{ marginBottom: 0 }}>

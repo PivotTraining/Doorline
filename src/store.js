@@ -29,7 +29,20 @@ export const DISPOS = {
   sold:      { lab: "Sold", hex: "#22c55e" },
   dnc:       { lab: "Do not contact", hex: "#64748b" },
 };
-export const PRODUCTS = ["Solar — Standard", "Solar — Premium", "Security System", "Internet / Telecom", "Pest Control — Annual", "Other"];
+// Demo-only placeholder catalog — real orgs set their own real campaign
+// names in Settings (org.products) instead of these; see hydrate() below.
+export const DEMO_PRODUCTS = ["Solar — Standard", "Solar — Premium", "Security System", "Internet / Telecom", "Pest Control — Annual", "Other"];
+// Live product/campaign list a rep is picking from right now — always the
+// org's own list (hydrate() guarantees it's never empty; a real org that
+// hasn't customized it yet gets a single neutral "Other" entry, never a
+// guessed-at real campaign name). Stable array reference so components that
+// pass this down to memoized rows don't invalidate them every render.
+const FALLBACK_PRODUCTS = ["Other"];
+export function activeProducts() { return state.org.products && state.org.products.length ? state.org.products : FALLBACK_PRODUCTS; }
+export function setOrgProducts(list) {
+  state.org.products = list;
+  emit(); push("organizations", state.org);
+}
 // Granular door-activity funnel reps tap as they work a door (separate from the final outcome).
 export const ACTIONS = [
   { key: "knocked", lab: "Door knocked", hex: "#38bdf8" },
@@ -79,7 +92,7 @@ function seed() {
       homes.push(h);
       if (st === "sold") {
         const val = 8000 + Math.floor(Math.random() * 20) * 1000;
-        const d = { id: uid(), repId: r.id, homeId: h.id, customer: "Customer " + (deals.length + 1), product: PRODUCTS[0], value: val, addr: h.addr, ts: now - Math.floor(Math.random() * 14) * 86400e3 };
+        const d = { id: uid(), repId: r.id, homeId: h.id, customer: "Customer " + (deals.length + 1), product: DEMO_PRODUCTS[0], value: val, addr: h.addr, ts: now - Math.floor(Math.random() * 14) * 86400e3 };
         h.deal = d; deals.push(d);
       }
     }
@@ -90,7 +103,7 @@ function seed() {
   // a real org's org.homeZip/homeLat/homeLng start null (see hydrate()) until an
   // admin sets a real one in Settings; the map falls back to a neutral US-wide
   // view, never to Atlanta specifically.
-  const org = { name: "Doorline", logo: null, homeZip: "30301", homeLat: C[0], homeLng: C[1],
+  const org = { name: "Doorline", logo: null, homeZip: "30301", homeLat: C[0], homeLng: C[1], products: DEMO_PRODUCTS,
     followup: { enabled: true, hours: 24, onPhone: true, onCB: true, quietStart: "21:00", quietEnd: "08:00" } };
 
   // bulletin board — admins broadcast to the whole team
@@ -141,7 +154,7 @@ function seed() {
 
   // street-sheet "D" rows create a deal so My Deals reflects them
   streetRows.filter((r) => r.d).forEach((r) => {
-    const dl = { id: uid(), repId: r.repId, homeId: null, customer: r.customer || "New customer", product: PRODUCTS[0], value: 12000, addr: r.street, ts: now };
+    const dl = { id: uid(), repId: r.repId, homeId: null, customer: r.customer || "New customer", product: DEMO_PRODUCTS[0], value: 12000, addr: r.street, ts: now };
     r.dealId = dl.id; deals.push(dl);
   });
 
@@ -158,6 +171,10 @@ function hydrate(s) {
   s.org.homeLat = s.org.homeLat ?? null;
   s.org.homeLng = s.org.homeLng ?? null;
   s.org.followup = s.org.followup || { enabled: true, hours: 24, onPhone: true, onCB: true, quietStart: "21:00", quietEnd: "08:00" };
+  // A real org that hasn't set its own product/campaign list yet gets a
+  // single neutral entry — never a guessed-at real campaign name (set the
+  // real list in Settings). Demo orgs already have DEMO_PRODUCTS from seed().
+  s.org.products = (s.org.products && s.org.products.length) ? s.org.products : ["Other"];
   s.posts = s.posts || [];
   s.territories = s.territories || [];
   s.tracks = s.tracks || {};
@@ -405,7 +422,7 @@ export function addStreetRow({ repId, date, ...init }) {
 // Marking "D" on a street row creates a deal (shows in My Deals); clearing it removes the deal.
 function linkStreetDeal(r) {
   if (r.dealId) return;
-  const d = { id: uid(), repId: r.repId, homeId: null, customer: r.customer || "New customer", product: PRODUCTS[0], value: 0, addr: r.street || "", ts: Date.now() };
+  const d = { id: uid(), repId: r.repId, homeId: null, customer: r.customer || "New customer", product: activeProducts()[0], value: 0, addr: r.street || "", ts: Date.now() };
   r.dealId = d.id; state.deals.push(d); push("deals", d);
 }
 function unlinkStreetDeal(r) {
