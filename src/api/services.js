@@ -18,7 +18,7 @@ export async function loadAll() {
     supabase.from("deals").select("*, homes(addr)"),
     supabase.from("posts").select("*, profiles(full_name)"),
     supabase.from("territories").select("*"),
-    supabase.from("street_rows").select("*"),
+    supabase.from("street_rows").select("*").order("slot", { nullsFirst: false }).order("created_at"),
   ]);
   return {
     org: o.data
