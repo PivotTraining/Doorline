@@ -3,6 +3,10 @@
 import { supabase } from "../supabaseClient";
 
 export const signIn = (email, password) => supabase.auth.signInWithPassword({ email, password });
+// New org signup: the DB trigger (see migration 0010) provisions the
+// organization + owner profile server-side once this auth user is created.
+export const signUp = (email, password, fullName, orgName) =>
+  supabase.auth.signUp({ email, password, options: { data: { full_name: fullName, org_name: orgName } } });
 export const signOut = () => supabase.auth.signOut();
 export const getSession = () => supabase.auth.getSession();
 export const onAuth = (cb) => supabase.auth.onAuthStateChange(cb);

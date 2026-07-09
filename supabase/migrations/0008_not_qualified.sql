@@ -4,7 +4,11 @@
 alter table street_rows
   add column if not exists nq boolean not null default false; -- not qualified
 
-create or replace function office_rollup(p_org uuid, p_day date)
+-- Column set changed (added nq), and Postgres won't let CREATE OR REPLACE
+-- change a function's OUT-parameter row type -- drop it first.
+drop function if exists office_rollup(uuid, date);
+
+create function office_rollup(p_org uuid, p_day date)
 returns table (rep_id uuid, full_name text, doors bigint,
                nh bigint, rl bigint, dm bigint, bid bigint, d bigint, ni bigint, nq bigint, cb bigint)
 language sql stable security definer set search_path = public as $$
