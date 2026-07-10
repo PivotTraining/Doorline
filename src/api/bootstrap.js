@@ -7,11 +7,12 @@ import * as auth from "./auth";
 import * as S from "./services";
 import { subscribeOrg } from "./realtime";
 import { setCtx } from "./context";
-import { startLocationFlush } from "./sync";
+import { startLocationFlush, startWriteFlush } from "./sync";
 import { loadSnapshot, applyRemote } from "../store";
 
 let unsub = null;
 let stopFlush = null;
+let stopWriteFlush = null;
 
 export async function initLive() {
   if (DEMO) return null;
@@ -24,10 +25,13 @@ export async function initLive() {
   unsub = subscribeOrg(profile.org_id, applyRemote);
   if (stopFlush) stopFlush();
   stopFlush = startLocationFlush();          // drain the GPS queue on an interval
+  if (stopWriteFlush) stopWriteFlush();
+  stopWriteFlush = startWriteFlush();        // retry any queued homes/deals/street-sheet writes
   return profile;
 }
 
 export function teardownLive() {
   if (unsub) { unsub(); unsub = null; }
   if (stopFlush) { stopFlush(); stopFlush = null; }
+  if (stopWriteFlush) { stopWriteFlush(); stopWriteFlush = null; }
 }

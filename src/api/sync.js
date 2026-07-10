@@ -1,33 +1,54 @@
 // ============================================================
 // Write-through dispatcher used by the store. Optimistic local
 // state is the source of truth for the UI; these calls push the
-// same change to Supabase. No-op in demo. Failures are swallowed
-// (best-effort) — the offline queue / realtime reconcile later.
+// same change to Supabase. No-op in demo.
+//
+// Writes go through a durable queue (writeQueue.js): a rep working with
+// patchy signal (very much the normal case door-to-door) can have a write
+// fail outright, not just run slow. Silently dropping that -- as the old
+// fire-and-forget version did -- loses their entry with no error and no
+// way to tell anything went wrong. The queue persists to localStorage and
+// retries until each write lands.
 // ============================================================
 import { DEMO, supabase } from "../supabaseClient";
 import * as S from "./services";
 import { createLocationQueue } from "./locationQueue";
+import { createWriteQueue } from "./writeQueue";
 
 const live = () => !DEMO && !!supabase;
-const safe = (p) => { try { Promise.resolve(p).catch(() => {}); } catch { /* ignore */ } };
+
+const HANDLERS = {
+  homes: { upsert: S.upsertHome, del: () => {} }, // homes are never hard-deleted client-side
+  deals: { upsert: S.upsertDeal, del: S.deleteDeal },
+  profiles: { upsert: S.upsertProfile, del: S.deleteProfile },
+  posts: { upsert: S.upsertPost, del: S.deletePost },
+  territories: { upsert: S.upsertTerritory, del: S.deleteTerritory },
+  street_rows: { upsert: S.upsertStreetRow, del: S.deleteStreetRow },
+  organizations: { upsert: S.upsertOrg, del: () => {} },
+};
+let writeQueue = null;
+function wq() { if (!writeQueue) writeQueue = createWriteQueue({ handlers: HANDLERS }); return writeQueue; }
 
 export function up(table, e) {
-  if (!live() || !e) return;
-  if (table === "homes") safe(S.upsertHome(e));
-  else if (table === "deals") safe(S.upsertDeal(e));
-  else if (table === "profiles") safe(S.upsertProfile(e));
-  else if (table === "posts") safe(S.upsertPost(e));
-  else if (table === "territories") safe(S.upsertTerritory(e));
-  else if (table === "street_rows") safe(S.upsertStreetRow(e));
-  else if (table === "organizations") safe(S.upsertOrg(e));
+  if (!live() || !e || !HANDLERS[table]) return;
+  wq().enqueue(table, "upsert", e);
+  wq().flush();
 }
 export function del(table, id) {
-  if (!live()) return;
-  if (table === "profiles") safe(S.deleteProfile(id));
-  else if (table === "posts") safe(S.deletePost(id));
-  else if (table === "territories") safe(S.deleteTerritory(id));
-  else if (table === "street_rows") safe(S.deleteStreetRow(id));
-  else if (table === "deals") safe(S.deleteDeal(id));
+  if (!live() || !HANDLERS[table]) return;
+  wq().enqueue(table, "delete", id);
+  wq().flush();
+}
+// Pending (not-yet-synced) write count, for a visible sync-status indicator.
+export function pendingWrites() { return wq().size(); }
+export function subscribeWrites(fn) { return wq().subscribe(fn); }
+export function startWriteFlush(intervalMs = 10000) {
+  if (!live()) return () => {};
+  wq().flush();
+  const id = setInterval(() => wq().flush(), intervalMs);
+  const onOnline = () => wq().flush();
+  window.addEventListener("online", onOnline);
+  return () => { clearInterval(id); window.removeEventListener("online", onOnline); };
 }
 // Not fire-and-forget: the caller needs the result (temp password / error).
 export async function createTeamMember(payload) {

@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import * as M from "../src/api/mappers.js";
 import { createCache } from "../src/api/cache.js";
 import { createLocationQueue } from "../src/api/locationQueue.js";
+import { createWriteQueue } from "../src/api/writeQueue.js";
 import { pointInPolygon } from "../src/lib/geo.js";
 import { toCSV } from "../src/lib/csv.js";
 import { localDay, localDayInTZ } from "../src/lib/date.js";
@@ -132,6 +133,44 @@ test("toCSV: headers, ordering, and escaping", () => {
   assert.equal(lines[1], 'Jordan,"said ""no, thanks""",7');
   assert.equal(lines[2], 'Tasha,"a,b",3');
   assert.equal(toCSV([]), "");
+});
+
+test("writeQueue retains a failed write and retries it (offline-safe)", async () => {
+  let mode = "fail";
+  const calls = [];
+  const handlers = { homes: { upsert: async (h) => { calls.push(h.id); if (mode === "fail") throw new Error("net"); }, del: async () => {} } };
+  const q = createWriteQueue({ handlers, persist: false });
+  q.enqueue("homes", "upsert", { id: "h1", addr: "1 Maple" });
+  let r = await q.flush();
+  assert.equal(r.flushed, 0);
+  assert.equal(q.size(), 1); // nothing lost while the request is failing
+
+  mode = "ok";
+  r = await q.flush();
+  assert.equal(r.flushed, 1);
+  assert.equal(q.size(), 0);
+  assert.deepEqual(calls, ["h1", "h1"]); // first attempt failed, second landed
+});
+
+test("writeQueue collapses a superseded write instead of replaying stale state", async () => {
+  const applied = [];
+  const handlers = { homes: { upsert: async (h) => { applied.push(h.status); }, del: async () => {} } };
+  const q = createWriteQueue({ handlers, persist: false });
+  q.enqueue("homes", "upsert", { id: "h1", status: "untouched" });
+  q.enqueue("homes", "upsert", { id: "h1", status: "sold" }); // supersedes the first before it ever flushed
+  assert.equal(q.size(), 1);
+  await q.flush();
+  assert.deepEqual(applied, ["sold"]); // only the latest state was ever sent
+});
+
+test("writeQueue notifies subscribers of the pending count as it changes", async () => {
+  const handlers = { deals: { upsert: async () => {}, del: async () => {} } };
+  const q = createWriteQueue({ handlers, persist: false });
+  const seen = [];
+  q.subscribe((n) => seen.push(n));
+  q.enqueue("deals", "upsert", { id: "d1" });
+  await q.flush();
+  assert.deepEqual(seen, [1, 0]); // queued, then drained
 });
 
 test("locationQueue backoff grows with consecutive failures", () => {
