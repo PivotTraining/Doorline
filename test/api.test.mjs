@@ -8,7 +8,8 @@ import { createLocationQueue } from "../src/api/locationQueue.js";
 import { createWriteQueue } from "../src/api/writeQueue.js";
 import { repCode, normalizeCampaign, normalizeCampaigns, personalizedEnrollUrl } from "../src/lib/campaigns.js";
 import { pointInPolygon } from "../src/lib/geo.js";
-import { toCSV } from "../src/lib/csv.js";
+import { toCSV, parseCSV } from "../src/lib/csv.js";
+import { segmentReport, buildRepIndex } from "../src/lib/reports.js";
 import { localDay, localDayInTZ } from "../src/lib/date.js";
 
 test("home round-trips through row mapping", () => {
@@ -195,6 +196,48 @@ test("personalizedEnrollUrl injects the rep code (placeholder or ?ref fallback)"
   assert.equal(personalizedEnrollUrl("https://x.com/enroll", "7A3F9C"), "https://x.com/enroll?ref=7A3F9C");
   assert.equal(personalizedEnrollUrl("https://x.com?a=1", "7A3F9C"), "https://x.com?a=1&ref=7A3F9C");
   assert.equal(personalizedEnrollUrl("", "7A3F9C"), "");
+});
+
+test("parseCSV handles quoted fields with commas, newlines, and escaped quotes", () => {
+  const text = 'Agent,Customer,Notes\n7A3F9C,"Smith, Jane","said ""yes"" today"\n65AAC0,"Doe\nJohn",ok\n';
+  const { headers, rows } = parseCSV(text);
+  assert.deepEqual(headers, ["Agent", "Customer", "Notes"]);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].Customer, "Smith, Jane");
+  assert.equal(rows[0].Notes, 'said "yes" today');
+  assert.equal(rows[1].Customer, "Doe\nJohn"); // embedded newline preserved
+  assert.deepEqual(parseCSV("").rows, []); // empty file is safe
+});
+
+test("segmentReport splits a master report by rep ID / email / name, surfaces unmatched", () => {
+  const reps = [
+    { id: "7a3f9c66-0000-0000-0000-000000000000", name: "Jordan Miles", email: "jordan@x.com" }, // repCode 7A3F9C
+    { id: "65aac000-0000-0000-0000-000000000000", name: "Tasha Reed", email: "tasha@x.com" },   // repCode 65AAC0
+  ];
+  const rows = [
+    { Agent: "7A3F9C", sale: "1" },        // by rep code
+    { Agent: "tasha@x.com", sale: "2" },   // by email
+    { Agent: "Jordan Miles", sale: "3" },  // by name
+    { Agent: "ZZ999", sale: "4" },         // unmatched
+    { Agent: "ZZ999", sale: "5" },         // unmatched (same bucket)
+  ];
+  const seg = segmentReport(rows, "Agent", reps);
+  assert.equal(seg.byRep.get(reps[0].id).length, 2); // code + name -> Jordan
+  assert.equal(seg.byRep.get(reps[1].id).length, 1); // email -> Tasha
+  assert.equal(seg.counts.unmatchedRows, 2);
+  assert.equal(seg.counts.unmatchedValues, 1);
+
+  // an admin override maps the stray ID to a rep
+  const seg2 = segmentReport(rows, "Agent", reps, { ZZ999: reps[1].id });
+  assert.equal(seg2.byRep.get(reps[1].id).length, 3); // email + 2 overridden
+  assert.equal(seg2.counts.unmatchedRows, 0);
+});
+
+test("buildRepIndex is case/space-insensitive on name and email", () => {
+  const idx = buildRepIndex([{ id: "7a3f9c66-0000-0000-0000-000000000000", name: "Jordan Miles", email: "Jordan@X.com" }]);
+  assert.equal(idx.get("jordan miles"), "7a3f9c66-0000-0000-0000-000000000000");
+  assert.equal(idx.get("jordan@x.com"), "7a3f9c66-0000-0000-0000-000000000000");
+  assert.equal(idx.get("7a3f9c"), "7a3f9c66-0000-0000-0000-000000000000");
 });
 
 test("locationQueue backoff grows with consecutive failures", () => {
