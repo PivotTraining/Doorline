@@ -25,7 +25,20 @@ const HANDLERS = {
   territories: { upsert: S.upsertTerritory, del: S.deleteTerritory },
   street_rows: { upsert: S.upsertStreetRow, del: S.deleteStreetRow },
   organizations: { upsert: S.upsertOrg, del: () => {} },
+  report_batches: { upsert: S.upsertReportBatch, del: S.deleteReportBatch },
+  report_rows: { upsert: S.upsertReportRow, del: S.deleteReportRow },
 };
+
+// Publish many report rows at once (one insert instead of N). Falls back to
+// the durable per-row queue if the bulk insert fails, so nothing is lost.
+export async function bulkInsert(table, rows) {
+  if (!live() || !rows?.length || !HANDLERS[table]) return;
+  try {
+    await S.bulkInsertReportRows(rows);
+  } catch {
+    for (const r of rows) up(table, r);
+  }
+}
 let writeQueue = null;
 function wq() { if (!writeQueue) writeQueue = createWriteQueue({ handlers: HANDLERS }); return writeQueue; }
 

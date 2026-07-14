@@ -45,6 +45,31 @@ export const upsertTerritory = (t)      => supabase.from("territories").upsert(M
 export const deleteTerritory = (id)     => supabase.from("territories").delete().eq("id", id);
 export const upsertStreetRow = (r)      => supabase.from("street_rows").upsert(M.streetRowToRow(r, org()));
 export const deleteStreetRow = (id)     => supabase.from("street_rows").delete().eq("id", id);
+export const upsertReportBatch = (b)    => supabase.from("report_batches").upsert(M.reportBatchToRow(b, org()));
+export const deleteReportBatch = (id)   => supabase.from("report_batches").delete().eq("id", id);
+export const upsertReportRow   = (r)    => supabase.from("report_rows").upsert(M.reportRowToRow(r, org()));
+export const deleteReportRow   = (id)   => supabase.from("report_rows").delete().eq("id", id);
+export const bulkInsertReportRows = async (rows) => {
+  const payload = rows.map((r) => M.reportRowToRow(r, org()));
+  const { error } = await supabase.from("report_rows").insert(payload);
+  if (error) throw error;
+};
+// Best-effort report load — kept OUT of loadAll's Promise.all so that if the
+// report tables don't exist yet, the whole app still boots. Returns [] on
+// any error.
+export async function loadReports() {
+  try {
+    const [batches, rows] = await Promise.all([
+      supabase.from("report_batches").select("*").order("created_at", { ascending: false }),
+      supabase.from("report_rows").select("*"),
+    ]);
+    if (batches.error || rows.error) return null;
+    return {
+      reportBatches: (batches.data || []).map(M.reportBatchFromRow),
+      reportRows: (rows.data || []).map(M.reportRowFromRow),
+    };
+  } catch { return null; }
+}
 export const upsertOrg       = (o)      => supabase.from("organizations").update({
   name: o.name, logo_path: o.logo, followup: o.followup, products: o.products,
   home_zip: o.homeZip || null, home_lat: o.homeLat ?? null, home_lng: o.homeLng ?? null,

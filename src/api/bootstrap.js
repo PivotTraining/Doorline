@@ -21,6 +21,10 @@ export async function initLive() {
   setCtx({ orgId: profile.org_id, repId: profile.id });
   const snap = await S.loadAll();
   loadSnapshot(snap, profile.id);
+  // Reports load separately + best-effort: a missing report table must not
+  // stop the app from booting.
+  const reports = await S.loadReports();
+  if (reports) loadSnapshot(reports, profile.id);
   if (unsub) unsub();
   unsub = subscribeOrg(profile.org_id, applyRemote);
   if (stopFlush) stopFlush();

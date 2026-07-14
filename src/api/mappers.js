@@ -68,6 +68,19 @@ export const profileFromRow = (r) => ({
   timezone: r.timezone || null, homeZip: r.home_zip || null, homeLat: r.home_lat ?? null, homeLng: r.home_lng ?? null,
 });
 
+export const reportBatchToRow = (b, orgId) => ({
+  id: b.id, org_id: orgId, name: b.name, cols: b.cols || [], uploaded_by: b.uploadedBy || null,
+  created_at: new Date(b.ts || Date.now()).toISOString(),
+});
+export const reportBatchFromRow = (r) => ({
+  id: r.id, name: r.name, cols: r.cols || [], uploadedBy: r.uploaded_by || null,
+  ts: r.created_at ? Date.parse(r.created_at) : Date.now(),
+});
+export const reportRowToRow = (r, orgId) => ({
+  id: r.id, org_id: orgId, batch_id: r.batchId, rep_id: r.repId, data: r.data || {},
+});
+export const reportRowFromRow = (r) => ({ id: r.id, batchId: r.batch_id, repId: r.rep_id, data: r.data || {} });
+
 export const streetRowToRow = (r, orgId) => ({
   id: r.id, org_id: orgId, rep_id: r.repId, day: r.date, street: r.street || null,
   slot: r.slot ?? null,

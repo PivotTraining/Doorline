@@ -1,16 +1,18 @@
 import { useState, useMemo } from "react";
-import { useStore, getState } from "../../store";
+import { useStore, getState, publishReportBatch, deleteReportBatch } from "../../store";
 import { repCode } from "../../lib/campaigns.js";
 import { parseCSV, downloadCSV } from "../../lib/csv.js";
 import { segmentReport } from "../../lib/reports.js";
 
 export default function Reports() {
   useStore();
-  const reps = getState().users.filter((u) => u.role === "rep" || u.role === "manager");
+  const state = getState();
+  const reps = state.users.filter((u) => u.role === "rep" || u.role === "manager");
   const [file, setFile] = useState(null);   // { name, headers, rows }
   const [idCol, setIdCol] = useState("");
   const [overrides, setOverrides] = useState({}); // rawValue -> repId
   const [err, setErr] = useState("");
+  const [published, setPublished] = useState("");
 
   const onFile = async (e) => {
     const f = e.target.files?.[0];
@@ -37,6 +39,17 @@ export default function Reports() {
   const nameOf = (id) => reps.find((r) => r.id === id)?.name || "Unknown";
   const dlRep = (id, rows) => downloadCSV(`${nameOf(id).replace(/\s+/g, "-")}-${repCode(id)}-report.csv`, rows);
   const setOverride = (raw, repId) => setOverrides((o) => ({ ...o, [raw]: repId || undefined }));
+
+  // Publish the assigned rows so each rep sees their own slice in-app.
+  const publish = () => {
+    if (!seg) return;
+    const assigned = [];
+    for (const [repId, rows] of seg.byRep.entries()) for (const data of rows) assigned.push({ repId, data });
+    if (!assigned.length) { setErr("Nothing is assigned to a rep yet."); return; }
+    const { count } = publishReportBatch({ name: file.name.replace(/\.csv$/i, ""), cols: file.headers }, assigned);
+    setPublished(`Published ${count} rows to ${seg.byRep.size} ${seg.byRep.size === 1 ? "rep" : "reps"}. They can see them under My Reports.`);
+    setTimeout(() => setPublished(""), 6000);
+  };
 
   return (
     <>
@@ -79,6 +92,17 @@ export default function Reports() {
               </p>
             )}
           </div>
+
+          {seg && seg.counts.matchedRows > 0 && (
+            <div className="card" style={{ marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+              <div>
+                <b>Publish to reps</b>
+                <p className="muted" style={{ margin: "2px 0 0", fontSize: 13 }}>Send each rep their {seg.counts.matchedRows} matched rows so they can see + download their own slice under My Reports.</p>
+                {published && <p style={{ color: "var(--green)", fontSize: 13, margin: "6px 0 0" }}>{published}</p>}
+              </div>
+              <button className="btn primary" onClick={publish}>📤 Publish to reps</button>
+            </div>
+          )}
 
           {seg && (
             <div className="card" style={{ marginBottom: 14 }}>
@@ -130,6 +154,28 @@ export default function Reports() {
             </div>
           )}
         </>
+      )}
+
+      {state.reportBatches.length > 0 && (
+        <div className="card" style={{ marginTop: 14 }}>
+          <h3 style={{ marginTop: 0 }}>Published reports</h3>
+          <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>Reports your team can already see in their own My Reports.</p>
+          <div className="table-scroll">
+            <table className="tbl">
+              <thead><tr><th>Report</th><th style={{ textAlign: "center" }}>Rows</th><th>Published</th><th></th></tr></thead>
+              <tbody>
+                {state.reportBatches.map((b) => (
+                  <tr key={b.id}>
+                    <td>{b.name}</td>
+                    <td style={{ textAlign: "center" }}>{state.reportRows.filter((r) => r.batchId === b.id).length}</td>
+                    <td className="muted" style={{ fontSize: 13 }}>{new Date(b.ts).toLocaleDateString([], { month: "short", day: "numeric" })}</td>
+                    <td style={{ textAlign: "right" }}><button className="btn sm danger" onClick={() => { if (confirm(`Unpublish "${b.name}"? Reps will no longer see it.`)) deleteReportBatch(b.id); }}>Unpublish</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
     </>
   );

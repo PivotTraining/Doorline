@@ -168,7 +168,7 @@ function seed() {
     r.dealId = dl.id; deals.push(dl);
   });
 
-  return { org, users, homes, deals, posts, territories, tracks, presence, streetRows, submittedDays: {}, sessionId: null };
+  return { org, users, homes, deals, posts, territories, tracks, presence, streetRows, submittedDays: {}, reportBatches: [], reportRows: [], sessionId: null };
 }
 
 // Fill in fields that older persisted state won't have (forward migration).
@@ -191,6 +191,8 @@ function hydrate(s) {
   s.presence = s.presence || {};
   s.streetRows = (s.streetRows || []).map((r) => ({ phone: "", done: false, snoozeUntil: 0, dealId: null, createdAt: Date.now(), ...r }));
   s.submittedDays = s.submittedDays || {};
+  s.reportBatches = s.reportBatches || []; // published master-report batches
+  s.reportRows = s.reportRows || [];       // each row assigned to a rep
   s.homes = (s.homes || []).map((h) => ({ activity: [], ...h }));
   s.deals = (s.deals || []).map((d) => ({ ts: Date.now(), ...d }));
   // Real users created before this field existed keep working — a missing
@@ -462,6 +464,36 @@ export function updateStreetRow(id, patch) {
   emit(); push("street_rows", r);
 }
 export function updateDeal(id, patch) { const d = state.deals.find((x) => x.id === id); if (d) { Object.assign(d, patch); emit(); push("deals", d); } }
+
+// ---------- master reports published to reps ----------
+// An admin uploads a master report, maps rows to reps, and publishes: each
+// assigned row becomes a report_row the rep can see + download in-app.
+export function publishReportBatch({ name, cols }, assignedRows) {
+  const batch = { id: uid(), name: name || "Report", cols: cols || [], uploadedBy: state.sessionId, ts: Date.now() };
+  const rows = assignedRows.map((r) => ({ id: uid(), batchId: batch.id, repId: r.repId, data: r.data }));
+  state.reportBatches.unshift(batch);
+  state.reportRows.push(...rows);
+  emit();
+  push("report_batches", batch);
+  sync.bulkInsert && sync.bulkInsert("report_rows", rows); // efficient bulk path in live mode
+  return { batchId: batch.id, count: rows.length };
+}
+export function repReportRows(repId) {
+  const rows = state.reportRows.filter((r) => r.repId === repId);
+  const byBatch = {};
+  rows.forEach((r) => { (byBatch[r.batchId] = byBatch[r.batchId] || []).push(r); });
+  return state.reportBatches
+    .filter((b) => byBatch[b.id])
+    .map((b) => ({ batch: b, rows: byBatch[b.id] }));
+}
+export function deleteReportBatch(id) {
+  state.reportBatches = state.reportBatches.filter((b) => b.id !== id);
+  const dropped = state.reportRows.filter((r) => r.batchId === id).map((r) => r.id);
+  state.reportRows = state.reportRows.filter((r) => r.batchId !== id);
+  emit();
+  pushDel("report_batches", id);
+  dropped.forEach((rid) => pushDel("report_rows", rid));
+}
 
 // ---------- daily sheet lifecycle ----------
 const dayKey = (repId, date) => repId + "|" + date;
