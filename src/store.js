@@ -613,6 +613,17 @@ export function applyRemote(table, payload) {
   } else if (table === "territories") {
     if (ev === "DELETE") state.territories = state.territories.filter((t) => t.id !== old?.id);
     else if (row) upsert(state.territories, M.territoryFromRow(row));
+  } else if (table === "profiles") {
+    if (ev === "DELETE") state.users = state.users.filter((u) => u.id !== old?.id);
+    else if (row) upsert(state.users, M.profileFromRow(row));
+  } else if (table === "report_batches") {
+    if (ev === "DELETE") {
+      state.reportBatches = state.reportBatches.filter((b) => b.id !== old?.id);
+      state.reportRows = state.reportRows.filter((r) => r.batchId !== old?.id);
+    } else if (row) upsert(state.reportBatches, M.reportBatchFromRow(row), true);
+  } else if (table === "report_rows") {
+    if (ev === "DELETE") state.reportRows = state.reportRows.filter((r) => r.id !== old?.id);
+    else if (row) upsert(state.reportRows, M.reportRowFromRow(row));
   }
   emit();
 }
