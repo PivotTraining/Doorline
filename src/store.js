@@ -11,6 +11,7 @@ import * as sync from "./api/sync";
 import * as M from "./api/mappers";
 import { localDay, localDayInTZ, guessTimezone } from "./lib/date.js";
 import { repZones, pointInPolygon, US_CENTER } from "./lib/geo.js";
+import { normalizeCampaigns, repCode } from "./lib/campaigns.js";
 
 export { localDay, localDayInTZ, US_CENTER };
 
@@ -38,11 +39,20 @@ export const DEMO_PRODUCTS = ["Solar — Standard", "Solar — Premium", "Securi
 // guessed-at real campaign name). Stable array reference so components that
 // pass this down to memoized rows don't invalidate them every render.
 const FALLBACK_PRODUCTS = ["Other"];
-export function activeProducts() { return state.org.products && state.org.products.length ? state.org.products : FALLBACK_PRODUCTS; }
-export function setOrgProducts(list) {
+// Campaigns are stored (rich objects) in org.products; activeCampaigns()
+// normalizes legacy string entries too. The deal picker only needs names,
+// so activeProducts() derives those from the campaign list.
+export function activeCampaigns() { return normalizeCampaigns(state.org.products && state.org.products.length ? state.org.products : FALLBACK_PRODUCTS); }
+export function activeProducts() {
+  const names = activeCampaigns().filter((c) => c.active && c.name).map((c) => c.name);
+  return names.length ? names : FALLBACK_PRODUCTS;
+}
+export function setOrgCampaigns(list) {
   state.org.products = list;
   emit(); push("organizations", state.org);
 }
+// Back-compat shim: a couple of call sites still add/remove a bare name.
+export function setOrgProducts(list) { setOrgCampaigns(list); }
 // Granular door-activity funnel reps tap as they work a door (separate from the final outcome).
 export const ACTIONS = [
   { key: "knocked", lab: "Door knocked", hex: "#38bdf8" },

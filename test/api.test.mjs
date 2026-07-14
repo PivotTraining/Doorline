@@ -6,6 +6,7 @@ import * as M from "../src/api/mappers.js";
 import { createCache } from "../src/api/cache.js";
 import { createLocationQueue } from "../src/api/locationQueue.js";
 import { createWriteQueue } from "../src/api/writeQueue.js";
+import { repCode, normalizeCampaign, normalizeCampaigns, personalizedEnrollUrl } from "../src/lib/campaigns.js";
 import { pointInPolygon } from "../src/lib/geo.js";
 import { toCSV } from "../src/lib/csv.js";
 import { localDay, localDayInTZ } from "../src/lib/date.js";
@@ -171,6 +172,29 @@ test("writeQueue notifies subscribers of the pending count as it changes", async
   q.enqueue("deals", "upsert", { id: "d1" });
   await q.flush();
   assert.deepEqual(seen, [1, 0]); // queued, then drained
+});
+
+test("repCode is a stable 6-char code derived from the profile id", () => {
+  assert.equal(repCode("7a3f9c66-1234-5678-9abc-def012345678"), "7A3F9C");
+  assert.equal(repCode("7a3f9c66-1234-5678-9abc-def012345678"), repCode("7a3f9c66-1234-5678-9abc-def012345678")); // stable
+  assert.equal(repCode("ab").length, 6); // short ids padded, never crash
+  assert.equal(repCode(null), "------");
+});
+
+test("normalizeCampaign upgrades a legacy string entry without losing it", () => {
+  assert.deepEqual(normalizeCampaign("Solar", 2), { id: "c2", name: "Solar", description: "", promo: "", enrollmentUrl: "", active: true });
+  const obj = { id: "x", name: "Gas", description: "d", promo: "p", enrollmentUrl: "u", active: false };
+  assert.deepEqual(normalizeCampaign(obj), obj);
+  assert.equal(normalizeCampaigns(["A", "B"]).length, 2);
+  assert.deepEqual(normalizeCampaigns(null), []);
+});
+
+test("personalizedEnrollUrl injects the rep code (placeholder or ?ref fallback)", () => {
+  assert.equal(personalizedEnrollUrl("https://x.com?agent={code}", "7A3F9C"), "https://x.com?agent=7A3F9C");
+  assert.equal(personalizedEnrollUrl("https://x.com/{rep}", "7A3F9C"), "https://x.com/7A3F9C");
+  assert.equal(personalizedEnrollUrl("https://x.com/enroll", "7A3F9C"), "https://x.com/enroll?ref=7A3F9C");
+  assert.equal(personalizedEnrollUrl("https://x.com?a=1", "7A3F9C"), "https://x.com?a=1&ref=7A3F9C");
+  assert.equal(personalizedEnrollUrl("", "7A3F9C"), "");
 });
 
 test("locationQueue backoff grows with consecutive failures", () => {

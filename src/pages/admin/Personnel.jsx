@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useStore, getState, addUser, updateUser, removeUser, toggleStatus, ROLE_LABEL, PLAN_NAME } from "../../store";
 import { geocodeZip } from "../../lib/geocode.js";
 import { US_TIMEZONES, guessTimezone } from "../../lib/date.js";
+import { repCode } from "../../lib/campaigns.js";
 import Modal from "../../components/Modal.jsx";
 
 const ROLES = ["owner", "admin", "manager", "rep", "viewer"];
@@ -69,12 +70,13 @@ export default function Personnel() {
         <div className="table-scroll">
           <table className="tbl">
             <thead>
-              <tr><th>Name</th><th>Email</th><th>Role</th><th>Territory</th><th>Home ZIP</th><th>Plan</th><th>Status</th><th></th></tr>
+              <tr><th>Name</th><th>Rep ID</th><th>Email</th><th>Role</th><th>Territory</th><th>Home ZIP</th><th>Plan</th><th>Status</th><th></th></tr>
             </thead>
             <tbody>
               {state.users.map((u) => (
                 <tr key={u.id}>
                   <td>{u.name}</td>
+                  <td className="muted" style={{ fontFamily: "monospace" }}>{repCode(u.id)}</td>
                   <td className="muted">{u.email}</td>
                   <td><span className="tag">{ROLE_LABEL[u.role]}</span></td>
                   <td className="muted">{u.territory}</td>

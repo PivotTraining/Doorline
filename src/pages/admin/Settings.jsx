@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useStore, getState, setOrg, setFollowupSettings, activeProducts, setOrgProducts } from "../../store";
+import { useStore, getState, setOrg, setFollowupSettings } from "../../store";
 import { useTheme, setTheme } from "../../theme.js";
 import { geocodeZip } from "../../lib/geocode.js";
 
@@ -8,21 +8,11 @@ export default function Settings() {
   const theme = useTheme();
   const org = getState().org;
   const fu = org.followup || {};
-  const products = activeProducts();
   const [name, setName] = useState(org.name);
   const [saved, setSaved] = useState(false);
   const [zip, setZip] = useState(org.homeZip || "");
   const [zipBusy, setZipBusy] = useState(false);
   const [zipSaved, setZipSaved] = useState(false);
-  const [newProduct, setNewProduct] = useState("");
-
-  const addProduct = () => {
-    const v = newProduct.trim();
-    if (!v || products.includes(v)) return;
-    setOrgProducts([...products, v]);
-    setNewProduct("");
-  };
-  const removeProduct = (p) => setOrgProducts(products.filter((x) => x !== p));
 
   const saveZip = async () => {
     if (!zip.trim()) return;
@@ -109,25 +99,12 @@ export default function Settings() {
       </div>
 
       <div className="card" style={{ marginTop: 14 }}>
-        <h3>💰 Products / campaigns</h3>
+        <h3>🎯 Products / campaigns</h3>
         <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
-          What reps pick from when they mark a "D" (Deal) on the Street Sheet or close a sale on a
-          door — your own real campaign names, not a guessed-at list. Whatever's here is exactly
-          what shows up in the dropdown.
+          Campaigns now have their own page — full breakdowns, promos, and a personalized enrollment
+          link per rep. Manage them under <b>Campaigns</b> in the sidebar. The campaign names there are
+          also exactly what reps pick from when they close a deal.
         </p>
-        <div className="row" style={{ flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-          {products.map((p) => (
-            <span key={p} className="tag" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              {p}
-              <button className="x" title={`Remove ${p}`} onClick={() => removeProduct(p)} style={{ fontSize: 14, lineHeight: 1 }}>×</button>
-            </span>
-          ))}
-        </div>
-        <div className="row">
-          <input className="input" style={{ maxWidth: 260 }} value={newProduct} placeholder="e.g. Dual Fuel — Gas & Electric"
-            onChange={(e) => setNewProduct(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addProduct()} />
-          <button className="btn" onClick={addProduct} disabled={!newProduct.trim()}>+ Add</button>
-        </div>
       </div>
 
       <div className="card" style={{ marginTop: 14 }}>

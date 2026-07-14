@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useStore, getState, repStats, updateUser, setConsent, ROLE_LABEL, PLAN_NAME } from "../../store";
+import { repCode } from "../../lib/campaigns.js";
 
 export default function Profile({ user }) {
   useStore();
@@ -35,10 +36,11 @@ export default function Profile({ user }) {
             <span>Email</span>
             <input className="input" value={user.email} disabled />
           </label>
-          <div className="row" style={{ gap: 8, marginBottom: 14 }}>
+          <div className="row" style={{ gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
             <span className="tag">{ROLE_LABEL[user.role]}</span>
             <span className="tag">Territory: {user.territory}</span>
             <span className="tag">Plan: {PLAN_NAME[user.plan] || "—"}</span>
+            <span className="tag" style={{ fontFamily: "monospace" }} title="Your unique rep ID — used on enrollment links and reports">ID: {repCode(user.id)}</span>
           </div>
           <div className="row">
             <button className="btn primary" onClick={save}>Save</button>
