@@ -19,11 +19,22 @@ export const dealToRow = (d, orgId) => ({
   id: d.id, org_id: orgId, rep_id: d.repId, home_id: d.homeId,
   customer: d.customer, product: d.product, value_cents: Math.round((d.value || 0) * 100),
   created_at: new Date(d.ts || Date.now()).toISOString(),
+  // Contract fields are only sent when a contract was actually captured, so
+  // deals without one never reference these columns — deploying the feature
+  // can't break deal syncing even before the columns are added to the DB.
+  ...(d.signedAt ? {
+    signature: d.signature || null,
+    signed_name: d.signedName || null,
+    signed_at: new Date(d.signedAt).toISOString(),
+    contract_terms: d.contractTerms || null,
+  } : {}),
 });
 export const dealFromRow = (r) => ({
   id: r.id, repId: r.rep_id, homeId: r.home_id, customer: r.customer,
   product: r.product, value: Math.round((r.value_cents || 0) / 100), addr: r.addr || "",
   ts: r.created_at ? Date.parse(r.created_at) : Date.now(),
+  signature: r.signature || null, signedName: r.signed_name || null,
+  signedAt: r.signed_at ? Date.parse(r.signed_at) : null, contractTerms: r.contract_terms || null,
 });
 
 export const postToRow = (p, orgId) => ({

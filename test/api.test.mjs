@@ -37,6 +37,23 @@ test("deal timestamp round-trips through created_at (powers the weekly My Deals 
   assert.equal(M.dealFromRow(row).ts, ts);
 });
 
+test("dealToRow omits contract columns unless a contract was captured (safe pre-migration)", () => {
+  // An ordinary deal must NOT reference the new columns, so its write can't
+  // fail against a DB that doesn't have them yet.
+  const plain = M.dealToRow({ id: "d1", repId: "r1", customer: "C", product: "Solar", value: 100 }, "org1");
+  assert.ok(!("signature" in plain) && !("signed_at" in plain));
+
+  // A signed deal round-trips its contract fields.
+  const signedAt = Date.parse("2026-07-01T15:00:00Z");
+  const signedRow = M.dealToRow({ id: "d2", repId: "r1", customer: "C", product: "Solar", value: 100, signedAt, signedName: "Jane Doe", signature: "data:image/png;base64,AAAA", contractTerms: "12mo" }, "org1");
+  assert.equal(signedRow.signed_name, "Jane Doe");
+  assert.equal(signedRow.signed_at, new Date(signedAt).toISOString());
+  const back = M.dealFromRow({ ...signedRow, value_cents: 10000 });
+  assert.equal(back.signedName, "Jane Doe");
+  assert.equal(back.signedAt, signedAt);
+  assert.equal(back.signature, "data:image/png;base64,AAAA");
+});
+
 test("localDay uses the LOCAL calendar date, unlike toISOString (the timezone bug this fixes)", () => {
   const prevTZ = process.env.TZ;
   process.env.TZ = "America/New_York"; // UTC-4/-5

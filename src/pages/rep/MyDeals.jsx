@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { useStore, getState, updateDeal, activeProducts, activeCampaigns } from "../../store";
 import { campaignByName, dealCommission } from "../../lib/commission.js";
+import ContractModal from "../../components/ContractModal.jsx";
 
 const WEEK_MS = 7 * 86400e3;
 const money2 = (n) => "$" + (Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -7,6 +9,7 @@ const money2 = (n) => "$" + (Number(n) || 0).toLocaleString(undefined, { minimum
 export default function MyDeals({ user }) {
   useStore();
   const state = getState();
+  const [contract, setContract] = useState(null); // deal whose contract is open
   const products = activeProducts();
   const campMap = campaignByName(activeCampaigns());
   const hasCommission = activeCampaigns().some((c) => Number(c.commissionAmount) > 0);
@@ -47,7 +50,7 @@ export default function MyDeals({ user }) {
         ) : (
           <div className="table-scroll">
             <table className="tbl">
-              <thead><tr><th>Customer</th><th>Product</th><th>Address</th><th style={{ width: 150 }}>Value ($)</th>{hasCommission && <th style={{ width: 110, textAlign: "right" }}>Commission</th>}<th style={{ width: 100 }}>When</th></tr></thead>
+              <thead><tr><th>Customer</th><th>Product</th><th>Address</th><th style={{ width: 150 }}>Value ($)</th>{hasCommission && <th style={{ width: 110, textAlign: "right" }}>Commission</th>}<th style={{ width: 130 }}>Contract</th><th style={{ width: 100 }}>When</th></tr></thead>
               <tbody>
                 {deals.map((d) => {
                   const isThisWeek = (d.ts || 0) >= weekCutoff;
@@ -66,6 +69,11 @@ export default function MyDeals({ user }) {
                       </td>
                       {hasCommission && <td style={{ textAlign: "right", color: "var(--green)", fontWeight: 600 }}>{money2(dealCommission(d, campMap))}</td>}
                       <td>
+                        {d.signedAt
+                          ? <button className="btn sm" onClick={() => setContract(d)}><span className="dot" style={{ background: "var(--green)" }} /> Signed</button>
+                          : <button className="btn sm primary" onClick={() => setContract(d)}>✍️ Sign</button>}
+                      </td>
+                      <td>
                         {isThisWeek
                           ? <span className="tag" style={{ borderColor: "var(--brand)", color: "var(--brand)" }}>This week</span>
                           : <span className="muted" style={{ fontSize: 12 }}>{new Date(d.ts || Date.now()).toLocaleDateString([], { month: "short", day: "numeric" })}</span>}
@@ -78,6 +86,8 @@ export default function MyDeals({ user }) {
           </div>
         )}
       </div>
+
+      {contract && <ContractModal deal={state.deals.find((d) => d.id === contract.id) || contract} onClose={() => setContract(null)} />}
     </>
   );
 }
