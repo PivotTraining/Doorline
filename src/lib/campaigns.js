@@ -16,7 +16,7 @@ export function repCode(id) {
 
 // Normalize any stored entry (legacy string OR object) into a full campaign.
 export function normalizeCampaign(c, i = 0) {
-  if (typeof c === "string") return { id: `c${i}`, name: c, description: "", promo: "", enrollmentUrl: "", active: true };
+  if (typeof c === "string") return { id: `c${i}`, name: c, description: "", promo: "", enrollmentUrl: "", active: true, commissionType: "flat", commissionAmount: 0 };
   return {
     id: c.id || `c${i}`,
     name: c.name || "",
@@ -24,6 +24,10 @@ export function normalizeCampaign(c, i = 0) {
     promo: c.promo || "",
     enrollmentUrl: c.enrollmentUrl || "",
     active: c.active !== false,
+    // Commission the rep earns per closed deal on this campaign. "flat" =
+    // a fixed dollar amount; "percent" = a % of the deal's contract value.
+    commissionType: c.commissionType === "percent" ? "percent" : "flat",
+    commissionAmount: Number(c.commissionAmount) || 0,
   };
 }
 

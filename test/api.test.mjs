@@ -10,6 +10,8 @@ import { repCode, normalizeCampaign, normalizeCampaigns, personalizedEnrollUrl }
 import { pointInPolygon } from "../src/lib/geo.js";
 import { toCSV, parseCSV } from "../src/lib/csv.js";
 import { segmentReport, buildRepIndex } from "../src/lib/reports.js";
+import { dealCommission, repEarnings, campaignByName } from "../src/lib/commission.js";
+import { normalizeCampaign as _nc } from "../src/lib/campaigns.js";
 import { localDay, localDayInTZ } from "../src/lib/date.js";
 
 test("home round-trips through row mapping", () => {
@@ -183,8 +185,8 @@ test("repCode is a stable 6-char code derived from the profile id", () => {
 });
 
 test("normalizeCampaign upgrades a legacy string entry without losing it", () => {
-  assert.deepEqual(normalizeCampaign("Solar", 2), { id: "c2", name: "Solar", description: "", promo: "", enrollmentUrl: "", active: true });
-  const obj = { id: "x", name: "Gas", description: "d", promo: "p", enrollmentUrl: "u", active: false };
+  assert.deepEqual(normalizeCampaign("Solar", 2), { id: "c2", name: "Solar", description: "", promo: "", enrollmentUrl: "", active: true, commissionType: "flat", commissionAmount: 0 });
+  const obj = { id: "x", name: "Gas", description: "d", promo: "p", enrollmentUrl: "u", active: false, commissionType: "percent", commissionAmount: 12 };
   assert.deepEqual(normalizeCampaign(obj), obj);
   assert.equal(normalizeCampaigns(["A", "B"]).length, 2);
   assert.deepEqual(normalizeCampaigns(null), []);
@@ -238,6 +240,35 @@ test("buildRepIndex is case/space-insensitive on name and email", () => {
   assert.equal(idx.get("jordan miles"), "7a3f9c66-0000-0000-0000-000000000000");
   assert.equal(idx.get("jordan@x.com"), "7a3f9c66-0000-0000-0000-000000000000");
   assert.equal(idx.get("7a3f9c"), "7a3f9c66-0000-0000-0000-000000000000");
+});
+
+test("dealCommission handles flat, percent, unset, and unknown-campaign cases", () => {
+  const campaigns = [
+    _nc({ name: "Solar", commissionType: "flat", commissionAmount: 150 }),
+    _nc({ name: "Dual Fuel", commissionType: "percent", commissionAmount: 10 }),
+    _nc({ name: "Freebie" }), // no commission set
+  ];
+  const m = campaignByName(campaigns);
+  assert.equal(dealCommission({ product: "Solar", value: 9000 }, m), 150);      // flat: fixed per deal
+  assert.equal(dealCommission({ product: "Dual Fuel", value: 1250 }, m), 125);  // percent: 10% of 1250
+  assert.equal(dealCommission({ product: "Dual Fuel", value: 1234.5 }, m), 123.45); // rounds to cents
+  assert.equal(dealCommission({ product: "Freebie", value: 9000 }, m), 0);      // no rate set
+  assert.equal(dealCommission({ product: "Unlisted", value: 9000 }, m), 0);     // campaign not found
+});
+
+test("repEarnings aggregates deals, value, and commission per rep", () => {
+  const campaigns = [
+    _nc({ name: "Solar", commissionType: "flat", commissionAmount: 100 }),
+    _nc({ name: "Dual Fuel", commissionType: "percent", commissionAmount: 5 }),
+  ];
+  const deals = [
+    { repId: "r1", product: "Solar", value: 8000 },
+    { repId: "r1", product: "Dual Fuel", value: 2000 }, // 5% = 100
+    { repId: "r2", product: "Solar", value: 5000 },
+  ];
+  const e = repEarnings(deals, campaigns);
+  assert.deepEqual(e.get("r1"), { deals: 2, value: 10000, commission: 200 });
+  assert.deepEqual(e.get("r2"), { deals: 1, value: 5000, commission: 100 });
 });
 
 test("locationQueue backoff grows with consecutive failures", () => {
