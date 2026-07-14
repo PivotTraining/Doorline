@@ -4,12 +4,15 @@ import Logo from "../components/Logo.jsx";
 import KnockIcon from "../components/KnockIcon.jsx";
 
 const FEATURES = [
+  { ic: "🎯", t: "Campaigns & enrollment links", d: "Launch a promo, hand every closer a personal enrollment link and rep ID, and track every sign-up back to the person who knocked." },
+  { ic: "✍️", t: "In-app contracts & signature", d: "Close at the door — capture the customer's name and an on-screen signature on a lightweight contract, saved straight to the deal." },
+  { ic: "📄", t: "Reports, split by rep", d: "Upload one master report and Doorline splits it by rep automatically. Each closer sees just their own rows, tied to their ID code." },
+  { ic: "💵", t: "Commission tracking", d: "Set flat or percentage commissions per campaign and see exactly what every rep is owed — no spreadsheets." },
   { ic: "🛰️", t: "GPS routes & accountability", d: "See where every rep actually worked — live routes on the map and hours-on vs. doors-knocked, even on doors they forgot to log." },
   { ic: "🧭", t: "Territory mapping", d: "Draw a zone on the map or drop in a ZIP code, assign it to a rep, and schedule the block. Reps see only their turf." },
   { ic: "📝", t: "Digital Street Sheet", d: "The clipboard, digitized. Reps tap NH / DM / Deal per door; it rolls up to a live office sheet for managers." },
   { ic: "🗺️", t: "Live team map", d: "Every door and rep across the org on one colorful map — dispositions, deals, and live dots in real time." },
-  { ic: "📣", t: "Bulletin board", d: "Push daily targets and shout-outs to the whole team. The latest hits every rep's home screen." },
-  { ic: "💰", t: "Deals & leaderboard", d: "Capture a sale at the door, track contract value, and rank the team by revenue and close rate automatically." },
+  { ic: "⚡", t: "Real-time & secure", d: "Publish a report or reassign a territory and it appears on every device in seconds — with strict per-company data isolation baked in." },
 ];
 
 const SHOTS = [
@@ -20,18 +23,18 @@ const SHOTS = [
 ];
 
 const STEPS = [
-  { n: 1, t: "Stage the field", d: "Add your reps, draw territories, and post the day's plan from the admin console." },
-  { n: 2, t: "Knock & log", d: "Reps work doors on the map or the Street Sheet — outcomes, deals, and routes sync instantly." },
-  { n: 3, t: "Coach with data", d: "Managers see live activity, routes, and the office rollup to coach in real time." },
+  { n: 1, t: "Stage the field", d: "Add your reps, draw territories, and launch a campaign with a personal enrollment link and ID for each closer." },
+  { n: 2, t: "Knock, close & sign", d: "Reps work doors on the map or Street Sheet, capture the deal, and take an on-screen signature — routes and sales sync instantly." },
+  { n: 3, t: "Report, rank & pay", d: "Managers get live rollups, split the master report back to each rep, and track exactly what every closer is owed." },
 ];
 
 const PLANS = [
   { name: "Starter", price: 39, desc: "For new crews getting off paper.", pop: false,
     feats: ["Map & door logging", "Dispositions + Street Sheet", "Follow-ups & reminders", "Leaderboard", "1 territory per rep", "Email support"] },
   { name: "Growth", price: 59, desc: "For growing door-to-door teams.", pop: true,
-    feats: ["Everything in Starter", "GPS route tracking & accountability", "Territory mapping (draw / ZIP)", "Live team map", "Bulletin board", "Deals pipeline + admin console"] },
+    feats: ["Everything in Starter", "GPS route tracking & accountability", "Territory mapping (draw / ZIP)", "Campaign hub + enrollment links", "In-app contracts & signature", "Live team map + deals pipeline"] },
   { name: "Scale", price: 89, desc: "For multi-office operations.", pop: false,
-    feats: ["Everything in Growth", "Advanced analytics & exports", "API access", "Custom branding & SSO", "Priority support"] },
+    feats: ["Everything in Growth", "Reports auto-split by rep", "Commission tracking", "Advanced analytics & API access", "Custom branding & SSO", "Priority support"] },
   { name: "Enterprise", price: null, desc: "For franchises & large orgs.", pop: false,
     feats: ["Everything in Scale", "Dedicated onboarding", "Data-warehouse export", "Security review & SLA", "Named success manager"] },
 ];
@@ -63,9 +66,9 @@ export default function Landing({ onEnter }) {
         {/* hero */}
         <section className="lp-hero">
           <div>
-            <span className="lp-eyebrow"><KnockIcon size={16} /> Built for door-to-door, from the first knock</span>
-            <h1>Know where your reps are. Close more doors.</h1>
-            <p className="sub">Doorline is the door-to-door sales platform — live GPS routes, territory mapping, a digital street sheet, and a real-time office dashboard, all in one.</p>
+            <span className="lp-eyebrow"><KnockIcon size={16} /> From the first knock to the signed contract</span>
+            <h1>Run your whole door-to-door team from one screen.</h1>
+            <p className="sub">Doorline covers the entire canvassing loop — GPS routes and territories, a digital street sheet, campaign enrollment links, in-app contracts with signature, per-rep reports, and commission tracking. Everything updates live, on every device.</p>
             <div className="cta-row">
               <button className="btn primary" onClick={onEnter}>Start free</button>
               <button className="btn" onClick={onEnter}>See the live demo →</button>
