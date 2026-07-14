@@ -1,0 +1,85 @@
+import { useStore, getState, dayStats, DISPOS } from "../../store";
+import { localDay } from "../../lib/date.js";
+
+export default function MyDay({ user }) {
+  useStore();
+  const state = getState();
+  const s = dayStats(user.id);
+  const mine = state.homes.filter((h) => h.repId === user.id);
+  const today = localDay();
+  const dueToday = mine.filter((h) => h.due && h.due <= today && ["callback", "appt"].includes(h.status));
+  const recent = mine.filter((h) => h.status !== "untouched").slice(-6).reverse();
+  const hour = new Date().getHours();
+  const greet = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const announce = [...state.posts].sort((a, b) => (b.pinned - a.pinned) || (b.ts - a.ts))[0];
+
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <h1>{greet}, {user.name.split(" ")[0]} 👋</h1>
+          <p>Territory: {user.territory} · Here's where today stands.</p>
+        </div>
+      </div>
+
+      {announce && (
+        <div className={"post" + (announce.pinned ? " pinned" : "")} style={{ marginBottom: 18 }}>
+          <div className="meta">📣 {announce.authorName} · team announcement</div>
+          <h4 style={{ margin: "4px 0 0" }}>{announce.title}</h4>
+          {announce.body && <div className="body">{announce.body}</div>}
+        </div>
+      )}
+
+      <div className="cards grid-4" style={{ marginBottom: 18 }}>
+        <Stat n={s.doors} l="Doors knocked" />
+        <Stat n={s.dm} l="Decision makers" />
+        <Stat n={s.d} l="Deals" sub={s.contacts ? `${s.rate}% close rate` : undefined} />
+        <Stat n={s.ni} l="Not interested" />
+      </div>
+      <p className="muted" style={{ fontSize: 12, marginTop: -10, marginBottom: 18 }}>Today's Street Sheet — resets at midnight, your time.</p>
+
+      <div className="cards grid-2">
+        <div className="card">
+          <h3>🔁 Follow-ups due</h3>
+          {dueToday.length === 0 ? (
+            <p className="muted">Nothing due today. Go knock some doors.</p>
+          ) : (
+            dueToday.map((h) => (
+              <div key={h.id} className="row between" style={{ padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+                <div>
+                  <div>{h.addr}</div>
+                  <small className="muted">{h.contact || "—"} · due {h.due}</small>
+                </div>
+                <span className="pill"><span className="dot" style={{ background: DISPOS[h.status].hex }} /> {DISPOS[h.status].lab}</span>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="card">
+          <h3>🕑 Recent activity</h3>
+          {recent.length === 0 ? (
+            <p className="muted">No doors logged yet. Open Map / Doors to start.</p>
+          ) : (
+            recent.map((h) => (
+              <div key={h.id} className="row between" style={{ padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+                <span>{h.addr}</span>
+                <span className="pill"><span className="dot" style={{ background: DISPOS[h.status].hex }} /> {DISPOS[h.status].lab}</span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function Stat({ n, l, sub }) {
+  return (
+    <div className="card stat">
+      <div className="n">{n}</div>
+      <div className="l">{l}</div>
+      {sub && <small style={{ color: "var(--green)" }}>{sub}</small>}
+    </div>
+  );
+}
