@@ -44,8 +44,15 @@ export function createWriteQueue({ handlers, persist = true }) {
       const h = handlers[item.table];
       if (!h) continue; // unknown table -- drop rather than retry forever
       try {
-        if (item.op === "delete") await h.del(item.id);
-        else await h.upsert(item.payload);
+        // supabase-js resolves to {data, error} on a rejected write (e.g. an
+        // RLS policy violation) -- it does NOT throw. Only a thrown network
+        // failure was being caught here, so a write the database actively
+        // rejected looked identical to a successful one: flushed++ and
+        // removed from the queue, gone for good with zero signal. Surface a
+        // resolved .error the same way a thrown failure is handled, so nothing
+        // is ever marked synced unless it actually landed.
+        const res = item.op === "delete" ? await h.del(item.id) : await h.upsert(item.payload);
+        if (res && res.error) throw res.error;
         flushed++;
       } catch {
         remaining.push({ ...item, attempts: item.attempts + 1 });

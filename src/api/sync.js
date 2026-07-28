@@ -70,6 +70,15 @@ export async function createTeamMember(payload) {
   catch { return { error: "Could not reach the server. Check your connection and try again." }; }
 }
 
+// Fire-and-forget helper for best-effort RPCs (activity pings, consent,
+// territory assignment) that don't go through the durable write queue --
+// there's no local optimistic state to roll back if these fail, so the
+// rejection is swallowed rather than left to throw uncaught, but still
+// logged so a real outage is visible in devtools instead of invisible.
+function safe(promise) {
+  Promise.resolve(promise).catch((err) => console.error("[doorline] background sync failed:", err));
+}
+
 export const activity = (homeId, type) => { if (live()) safe(S.recordActivity(homeId, type)); };
 export const consent = (granted) => { if (live()) safe(S.setConsentRpc(granted)); };
 export const assignTerritory = (tid, repId) => { if (live()) safe(S.assignTerritory(tid, repId)); };

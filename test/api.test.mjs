@@ -193,6 +193,31 @@ test("writeQueue collapses a superseded write instead of replaying stale state",
   assert.deepEqual(applied, ["sold"]); // only the latest state was ever sent
 });
 
+test("writeQueue treats a resolved {error} as a failure, not a success (regression: silent data loss on RLS rejection)", async () => {
+  // supabase-js resolves to {data, error} on a database-level rejection (e.g.
+  // an RLS policy violation) -- it does NOT throw. A handler that mirrors
+  // that exact shape used to be counted as flushed and dropped forever.
+  let mode = "reject";
+  const calls = [];
+  const handlers = {
+    street_rows: {
+      upsert: async (r) => { calls.push(r.id); return mode === "reject" ? { data: null, error: { message: "new row violates row-level security policy" } } : { data: r, error: null }; },
+      del: async () => ({ data: null, error: null }),
+    },
+  };
+  const q = createWriteQueue({ handlers, persist: false });
+  q.enqueue("street_rows", "upsert", { id: "s1", street: "1 Maple" });
+  let r = await q.flush();
+  assert.equal(r.flushed, 0);
+  assert.equal(q.size(), 1); // must stay queued -- a resolved error is not a success
+
+  mode = "ok";
+  r = await q.flush();
+  assert.equal(r.flushed, 1);
+  assert.equal(q.size(), 0);
+  assert.deepEqual(calls, ["s1", "s1"]);
+});
+
 test("writeQueue notifies subscribers of the pending count as it changes", async () => {
   const handlers = { deals: { upsert: async () => {}, del: async () => {} } };
   const q = createWriteQueue({ handlers, persist: false });
