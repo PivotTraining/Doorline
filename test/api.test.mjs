@@ -90,6 +90,15 @@ test("street row round-trips including the Not Qualified disposition", () => {
   assert.equal(back.cb, "5:30");
 });
 
+test("street row round-trips its linked deal id (regression: marking D lost its deal link on refresh)", () => {
+  const r = { id: "s2", repId: "r1", date: "2026-07-08", street: "2 Oak", nh: false, rl: false,
+    dm: false, bid: false, d: true, ni: false, nq: false, customer: "C", phone: "", comments: "", cb: "", done: false, snoozeUntil: 0, dealId: "deal-123" };
+  const row = M.streetRowToRow(r, "org1");
+  assert.equal(row.deal_id, "deal-123");
+  const back = M.streetRowFromRow(row);
+  assert.equal(back.dealId, "deal-123");
+});
+
 test("territory polygon round-trips (lat/lng order + closed ring)", () => {
   const ring = [[33.70, -84.40], [33.72, -84.40], [33.72, -84.38]];
   const row = M.territoryToRow({ id: "t1", name: "North", color: "#000", assignedTo: "r1", boundary: ring, start: "", end: "", notes: "" }, "org1");
