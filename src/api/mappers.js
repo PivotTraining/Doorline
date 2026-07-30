@@ -86,7 +86,14 @@ export const streetRowToRow = (r, orgId) => ({
   slot: r.slot ?? null,
   nh: !!r.nh, rl: !!r.rl, dm: !!r.dm, bid: !!r.bid, d: !!r.d, ni: !!r.ni, nq: !!r.nq,
   customer: r.customer || null, phone: r.phone || null, comments: r.comments || null, cb: r.cb || null,
-  done: !!r.done, snooze_until: r.snoozeUntil || 0, deal_id: r.dealId || null,
+  done: !!r.done, snooze_until: r.snoozeUntil || 0,
+  // Only sent when the row actually has a linked deal, matching dealToRow's
+  // contract-column pattern: a street row without a deal never references
+  // this column, so syncing keeps working even before 0017 is applied.
+  // (Sending it unconditionally made PostgREST reject EVERY street-row write
+  // with PGRST204 on a database that hadn't run the migration yet -- which
+  // silently blocked a rep's entire day of entries from ever saving.)
+  ...(r.dealId ? { deal_id: r.dealId } : {}),
 });
 export const streetRowFromRow = (r) => ({
   id: r.id, repId: r.rep_id, date: r.day, street: r.street || "",

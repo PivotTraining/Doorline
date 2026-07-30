@@ -99,6 +99,19 @@ test("street row round-trips its linked deal id (regression: marking D lost its 
   assert.equal(back.dealId, "deal-123");
 });
 
+test("street row omits deal_id entirely when there is no deal (safe before migration 0017)", () => {
+  // Sending deal_id unconditionally made PostgREST reject EVERY street-row
+  // write with PGRST204 on a database that hadn't applied 0017 yet, silently
+  // blocking a rep's whole day from saving. A row with no deal must not
+  // reference the column at all.
+  const r = { id: "s3", repId: "r1", date: "2026-07-08", street: "3 Pine", nh: true, rl: false,
+    dm: false, bid: false, d: false, ni: false, nq: false, customer: "", phone: "", comments: "", cb: "", done: false, snoozeUntil: 0, dealId: null };
+  const row = M.streetRowToRow(r, "org1");
+  assert.ok(!("deal_id" in row), "deal_id must be absent, not null, when unset");
+  assert.equal(row.street, "3 Pine"); // the rest of the row is unaffected
+  assert.equal(M.streetRowFromRow(row).dealId, null);
+});
+
 test("territory polygon round-trips (lat/lng order + closed ring)", () => {
   const ring = [[33.70, -84.40], [33.72, -84.40], [33.72, -84.38]];
   const row = M.territoryToRow({ id: "t1", name: "North", color: "#000", assignedTo: "r1", boundary: ring, start: "", end: "", notes: "" }, "org1");
