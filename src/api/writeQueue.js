@@ -7,7 +7,7 @@
 // went wrong. This queue persists pending writes to localStorage (so they
 // survive a reload or the app being closed) and retries them, in order,
 // until they land.
-// ============================================================
+// ===========================================================
 const KEY = "doorline_write_queue_v1";
 
 function load() {
