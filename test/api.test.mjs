@@ -231,6 +231,34 @@ test("writeQueue treats a resolved {error} as a failure, not a success (regressi
   assert.deepEqual(calls, ["s1", "s1"]);
 });
 
+test("writeQueue keeps writes enqueued DURING a flush (regression: in-flight edits were discarded)", async () => {
+  // flush() used to rebuild the queue as `q = remaining`, replacing it
+  // wholesale -- so any door a rep logged while requests were still in
+  // flight was silently dropped from the queue and never sent. This is the
+  // "numbers disappear" race: nothing failed, the entry just ceased to exist.
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const sent = [];
+  const handlers = {
+    street_rows: {
+      upsert: async (r) => { sent.push(r.id); if (r.id === "slow") await gate; return { error: null }; },
+      del: async () => ({ error: null }),
+    },
+  };
+  const q = createWriteQueue({ handlers, persist: false });
+  q.enqueue("street_rows", "upsert", { id: "slow", street: "1 First" });
+
+  const flushing = q.flush();                                  // starts, blocks on "slow"
+  q.enqueue("street_rows", "upsert", { id: "typed-midflight", street: "2 Second" }); // rep keeps working
+  release();
+  await flushing;
+
+  // The mid-flight entry must still exist -- either already sent by the
+  // follow-up pass, or still queued for the next one. It must never vanish.
+  const survived = sent.includes("typed-midflight") || q.size() > 0;
+  assert.ok(survived, "a write enqueued during a flush must not be discarded");
+});
+
 test("writeQueue notifies subscribers of the pending count as it changes", async () => {
   const handlers = { deals: { upsert: async () => {}, del: async () => {} } };
   const q = createWriteQueue({ handlers, persist: false });
