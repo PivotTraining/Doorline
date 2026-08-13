@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useStore, getState, login } from "../store";
 import { DEMO } from "../supabaseClient";
-import { signIn as authSignIn, signUp as authSignUp } from "../api/auth";
+import { signIn as authSignIn, signUp as authSignUp, signOut as authSignOut } from "../api/auth";
 import { initLive } from "../api/bootstrap";
 import { useTheme, toggleTheme } from "../theme.js";
 import Logo from "../components/Logo.jsx";
@@ -29,7 +29,16 @@ export default function Login({ onBack }) {
       // Live mode: real Supabase Auth, then hydrate + subscribe.
       const { error } = await authSignIn(em.trim(), pw);
       if (error) return setErr(error.message);
-      await initLive();
+      // The password can be correct while the account still can't load -- if
+      // the profile row is missing or unreadable, initLive() returns null and
+      // nothing sets a session, so the user silently lands back on this
+      // screen. That is indistinguishable from a wrong password unless we say
+      // so. Sign the half-open session back out and name the real problem.
+      const profile = await initLive();
+      if (!profile) {
+        await authSignOut().catch(() => {});
+        return setErr("Your password is correct, but this account isn't set up for a team yet. Ask your admin to add you (Personnel → Add person) — no need to change your password.");
+      }
       return;
     }
     const r = login(em.trim(), pw);
