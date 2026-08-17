@@ -1,0 +1,324 @@
+<style>
+:root{
+  --bg:#f5f8fc; --surface:#ffffff; --surface-2:#eef3fa; --ink:#101d30; --muted:#5a6b82;
+  --line:#e0e7f1; --brand:#2563eb; --brand-ink:#1d4ed8; --brand-weak:#e9f1ff;
+  --green:#12925a; --amber:#b26a06; --violet:#6d3bd4; --violet-weak:#efe9fd;
+  --shadow:0 1px 2px rgba(16,29,48,.05),0 12px 30px -18px rgba(16,29,48,.28);
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0b111c; --surface:#131d2c; --surface-2:#0f1826; --ink:#e7eef8; --muted:#93a3ba;
+  --line:#233247; --brand:#5b9bff; --brand-ink:#8fbaff; --brand-weak:#15243c;
+  --green:#35c987; --amber:#eaa64d; --violet:#a985ff; --violet-weak:#221a3a;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 16px 40px -20px rgba(0,0,0,.6);
+}}
+:root[data-theme="light"]{
+  --bg:#f5f8fc; --surface:#ffffff; --surface-2:#eef3fa; --ink:#101d30; --muted:#5a6b82;
+  --line:#e0e7f1; --brand:#2563eb; --brand-ink:#1d4ed8; --brand-weak:#e9f1ff;
+  --green:#12925a; --amber:#b26a06; --violet:#6d3bd4; --violet-weak:#efe9fd;
+  --shadow:0 1px 2px rgba(16,29,48,.05),0 12px 30px -18px rgba(16,29,48,.28);
+}
+:root[data-theme="dark"]{
+  --bg:#0b111c; --surface:#131d2c; --surface-2:#0f1826; --ink:#e7eef8; --muted:#93a3ba;
+  --line:#233247; --brand:#5b9bff; --brand-ink:#8fbaff; --brand-weak:#15243c;
+  --green:#35c987; --amber:#eaa64d; --violet:#a985ff; --violet-weak:#221a3a;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 16px 40px -20px rgba(0,0,0,.6);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1060px;margin:0 auto;padding:0 20px 72px}
+h1,h2,h3,h4{text-wrap:balance;line-height:1.15;letter-spacing:-.02em;margin:0}
+.eyebrow{text-transform:uppercase;letter-spacing:.14em;font-size:12px;font-weight:700;color:var(--muted);margin:0 0 10px}
+.eyebrow.blue{color:var(--brand)}
+code{font-family:ui-monospace,Menlo,monospace;font-size:.85em;background:var(--surface-2);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+
+.top{position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;
+  padding:12px 0;background:color-mix(in srgb,var(--bg) 86%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:18px}
+.tglt{width:34px;height:34px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:15px;cursor:pointer}
+.tglt:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+
+.hero{padding:44px 0 8px}
+.hero h1{font-size:clamp(30px,6vw,48px);font-weight:800;margin:0 0 14px}
+.hero .lede{font-size:18px;color:var(--muted);max-width:64ch;margin:0 0 20px}
+.hero .lede b{color:var(--ink)}
+.draft{display:flex;gap:12px;align-items:flex-start;background:var(--amber);background:color-mix(in srgb,var(--amber) 12%,var(--surface));
+  border:1px solid color-mix(in srgb,var(--amber) 45%,var(--line));border-radius:12px;padding:12px 15px;margin:8px 0 0;font-size:14px}
+.draft b{color:var(--ink)}
+.draft .dot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--amber);margin-top:7px}
+
+h2.sec-h{font-size:clamp(22px,4vw,30px);font-weight:800;margin:0 0 6px}
+.sec-lead{color:var(--muted);font-size:16px;margin:0 0 22px;max-width:64ch}
+.band{padding:48px 2px 4px}
+
+/* ladder */
+.ladder{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.tier{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:var(--shadow);display:flex;flex-direction:column;position:relative;overflow:hidden}
+.tier::before{content:"";position:absolute;left:0;top:0;height:4px;width:100%;background:var(--accent,var(--brand))}
+.tier .step{font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.tier h3{font-size:22px;font-weight:800;margin:2px 0 2px}
+.tier .tag{font-size:13px;color:var(--muted);min-height:38px}
+.tier .price{font-weight:800;font-size:19px;margin:12px 0 4px;font-variant-numeric:tabular-nums}
+.tier .price small{font-weight:600;font-size:12px;color:var(--muted)}
+.tier ul{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.tier li{position:relative;padding-left:20px;font-size:13.5px}
+.tier li::before{content:"";position:absolute;left:2px;top:8px;width:6px;height:6px;border-radius:2px;background:var(--accent,var(--brand));transform:rotate(45deg)}
+.tier .incl{margin-top:12px;font-size:12.5px;color:var(--muted);font-style:italic;padding-top:10px;border-top:1px dashed var(--line)}
+.t-track{--accent:var(--green)} .t-train{--accent:var(--brand)} .t-pulse{--accent:var(--violet)} .t-house{--accent:var(--amber)}
+.live-badge{display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:999px;background:var(--green);color:#fff;margin-left:6px}
+.soon-badge{display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:999px;background:var(--surface-2);color:var(--muted);border:1px solid var(--line);margin-left:6px}
+
+/* generic cards */
+.cards{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow)}
+.card h4{font-size:17px;font-weight:800;margin:0 0 6px;display:flex;align-items:center;gap:8px}
+.card p{margin:0 0 8px;font-size:14px;color:var(--muted)}
+.card .who{font-size:12.5px;color:var(--ink);font-weight:600}
+.lens .ic{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-size:15px;background:var(--violet-weak);flex:none}
+
+.callout{background:var(--brand-weak);border:1px solid color-mix(in srgb,var(--brand) 30%,var(--line));border-radius:12px;padding:14px 16px;margin-top:16px}
+.callout b{color:var(--brand-ink)}
+.callout p{margin:6px 0 0;font-size:14px}
+
+/* house builder mock */
+.house{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px;box-shadow:var(--shadow)}
+.builder{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:14px}
+.builder .bh{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:10px}
+.chip-row{display:flex;flex-wrap:wrap;gap:7px}
+.chip{font-size:12.5px;font-weight:600;border-radius:8px;padding:6px 11px;border:1px solid var(--line);background:var(--surface);display:flex;align-items:center;gap:6px}
+.chip.on{border-color:var(--brand);background:var(--brand-weak);color:var(--brand-ink)}
+.chip .g{cursor:grab;opacity:.5}
+.house ul{margin:10px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:9px}
+.house li{position:relative;padding-left:22px;font-size:14.5px}
+.house li::before{content:"";position:absolute;left:2px;top:8px;width:7px;height:7px;border-radius:2px;background:var(--amber);transform:rotate(45deg)}
+
+/* pricing table */
+.ptable{width:100%;border-collapse:collapse;font-size:14px;background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.ptable th,.ptable td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line)}
+.ptable thead th{background:var(--surface-2);font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.ptable td.num{font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}
+.ptable tr:last-child td{border-bottom:none}
+.pill{display:inline-block;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;background:var(--green);color:#fff}
+
+/* feasibility */
+.feas{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.fbox{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px}
+.fbox .s{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.fbox h4{font-size:15px;margin:6px 0 6px}
+.fbox p{margin:0;font-size:12.5px;color:var(--muted)}
+.s.live{color:var(--green)} .s.build{color:var(--amber)}
+
+.foot{margin-top:52px;padding-top:22px;border-top:1px solid var(--line);color:var(--muted);font-size:14px}
+
+@media (max-width:900px){ .ladder{grid-template-columns:repeat(2,1fr)} .feas{grid-template-columns:repeat(2,1fr)} }
+@media (max-width:680px){ .ladder{grid-template-columns:1fr} .cards{grid-template-columns:1fr} .house{grid-template-columns:1fr} .feas{grid-template-columns:1fr} }
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+
+<div class="wrap">
+<header class="top">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" width="28" height="28" aria-label="Doorline"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2e90fa"/><stop offset="1" stop-color="#7bb8ff"/></linearGradient></defs><rect width="32" height="32" rx="8" fill="url(#g)"/><path d="M10 25 V14 a6 6 0 0 1 12 0 V25 Z" fill="#fff" opacity=".96"/><rect x="9.2" y="24.2" width="13.6" height="1.9" rx=".95" fill="#fff" opacity=".96"/><path d="M18.4 15.8 a2.2 2.2 0 0 1 2.2 2.2 c0 1.6-2.2 3.9-2.2 3.9 s-2.2-2.3-2.2-3.9 a2.2 2.2 0 0 1 2.2-2.2 Z" fill="#2e90fa"/><circle cx="18.4" cy="18" r=".85" fill="#fff"/></svg>
+    <span>Doorline × Pivot</span>
+  </div>
+  <button id="tt" class="tglt" aria-label="Toggle light or dark">◐</button>
+</header>
+
+<section class="hero">
+  <p class="eyebrow blue">Offer architecture · working draft</p>
+  <h1>From a street sheet to a white-label training platform</h1>
+  <p class="lede">One ladder, four rungs. Each company starts with <b>tracking</b>, then layers on <b>training</b>, a <b>human-centered copilot</b>, and finally their own <b>branded house</b> — all on one platform Pivot oversees. Every rung includes everything below it.</p>
+  <div class="draft"><span class="dot"></span><div><b>Read me first.</b> Only the base tier (<b>Track</b>) is live in the product today. <b>Train</b>, <b>Pulse</b>, and <b>House</b> are the build-out being packaged here, and the prices are a <b>starting recommendation</b> anchored to competitor benchmarks — not final numbers. This page is to react to, not to publish.</div></div>
+</section>
+
+<section class="band">
+  <h2 class="sec-h">The four-rung ladder</h2>
+  <p class="sec-lead">Named so a buyer instantly gets the progression. Only reps are billed at every rung — owners, admins, and managers stay free, the way Doorline already works.</p>
+  <div class="ladder">
+
+    <div class="tier t-track">
+      <span class="step">Rung 1 · Base</span>
+      <h3>Track <span class="live-badge">Live</span></h3>
+      <div class="tag">Get the team off the clipboard and onto an accountable map.</div>
+      <div class="price">$35<small> /rep/mo</small></div>
+      <ul>
+        <li>Digital Street Sheet + dispositions</li>
+        <li>GPS tracking, consent &amp; <b>geofencing</b></li>
+        <li>Live Office Sheet rollup</li>
+        <li>Leaderboard, Deals, Follow-ups</li>
+        <li>Territories &amp; team map</li>
+      </ul>
+      <div class="incl">The foundation everything else rides on.</div>
+    </div>
+
+    <div class="tier t-train">
+      <span class="step">Rung 2</span>
+      <h3>Train <span class="soon-badge">Build</span></h3>
+      <div class="tag">Infuse Pivot coaching where reps already work.</div>
+      <div class="price">$65<small> /rep/mo + content</small></div>
+      <ul>
+        <li>Pivot Academy in-app (onboarding + daily drills)</li>
+        <li>Scripts &amp; rebuttals <b>triggered by dispositions</b></li>
+        <li>Certification badges on Profile</li>
+        <li>Company picks topics → Pivot builds them</li>
+      </ul>
+      <div class="incl">Everything in Track, plus training.</div>
+    </div>
+
+    <div class="tier t-pulse">
+      <span class="step">Rung 3</span>
+      <h3>Pulse <span class="soon-badge">Build</span></h3>
+      <div class="tag">A human-centered copilot reading the same data for risk &amp; wellness.</div>
+      <div class="price">+$18<small> /rep/mo add-on</small></div>
+      <ul>
+        <li>Wellbeing check-ins (support-first)</li>
+        <li>Safety / lone-worker alerts</li>
+        <li>Attrition &amp; performance risk flags</li>
+        <li>Compliance risk (territory, consent, hours)</li>
+      </ul>
+      <div class="incl">Attach to any rung. Care, not surveillance.</div>
+    </div>
+
+    <div class="tier t-house">
+      <span class="step">Rung 4 · Top</span>
+      <h3>House <span class="soon-badge">Build</span></h3>
+      <div class="tag">Their own branded platform; you run the estate.</div>
+      <div class="price">from $750<small> /mo license + seats</small></div>
+      <ul>
+        <li>Fully branded, data-isolated company "house"</li>
+        <li><b>Drag-and-drop House Builder</b> to configure modules</li>
+        <li>Pivot parent oversight across every house</li>
+        <li>Training &amp; Pulse bundled; services billed separately</li>
+      </ul>
+      <div class="incl">White-label, on one scalable platform.</div>
+    </div>
+
+  </div>
+</section>
+
+<section class="band">
+  <h2 class="sec-h">Pulse — the wellness &amp; risk copilot</h2>
+  <p class="sec-lead">You picked all four lenses. They read the tracking and activity Doorline already captures — no new hardware, no extra data collection — and turn it into people signals, not just sales numbers.</p>
+  <div class="cards">
+    <div class="card lens">
+      <h4><span class="ic">💚</span> Wellbeing — support-first</h4>
+      <p>Hours-on, streaks without a break, and slumps become gentle prompts: a rep self check-in, and a private “worth checking on Jordan” nudge to the manager.</p>
+      <div class="who">Serves: the rep first, then the manager.</div>
+    </div>
+    <div class="card lens">
+      <h4><span class="ic">🛟</span> Safety — lone-worker</h4>
+      <p>No check-in for X hours, off-route far from any assigned door, or a panic tap raises a manager alert. Field staff working alone get a safety net.</p>
+      <div class="who">Serves: manager / office, in real time.</div>
+    </div>
+    <div class="card lens">
+      <h4><span class="ic">📉</span> Attrition &amp; performance risk</h4>
+      <p>Falling activity, dropping close rate, or fading logins flag a rep trending toward a slump or the door — early enough to coach, not exit-interview.</p>
+      <div class="who">Serves: manager + Pivot coaches.</div>
+    </div>
+    <div class="card lens">
+      <h4><span class="ic">🛡️</span> Compliance risk</h4>
+      <p>Worked outside assigned territory, missing tracking consent, or hours pushing labor limits get flagged before they become a liability.</p>
+      <div class="who">Serves: the company / admin.</div>
+    </div>
+  </div>
+  <div class="callout">
+    <b>The trust line this has to hold.</b>
+    <p>Human-centered means consent-based and support-framed. Reps opt in (Doorline already gates tracking on consent), wellbeing signals are shown to the rep themselves, and the language is “here to help,” never “gotcha.” Get this framing right and Pulse is a retention feature; get it wrong and it reads as spyware. It's the single most important design decision in this tier.</p>
+  </div>
+</section>
+
+<section class="band">
+  <h2 class="sec-h">The White-Label House</h2>
+  <p class="sec-lead">The scalable model: every company is a branded, isolated house on one shared platform — not a separate app to maintain — with Pivot as the landlord who sees the whole estate. Doorline already isolates data per company; this adds the branding depth and the builder.</p>
+  <div class="house">
+    <div>
+      <ul>
+        <li>Their logo, name, and colors throughout — plus their own domain.</li>
+        <li>Their own reps, campaigns, contracts, and Pivot-built training — walled off from every other house.</li>
+        <li><b>Pivot parent dashboard</b>: every house's health, seats, and Pulse flags in one overseer view.</li>
+        <li>One codebase, one deploy — so it scales to many houses without multiplying what can break.</li>
+      </ul>
+    </div>
+    <div class="builder" aria-label="House Builder mock">
+      <div class="bh">🎛️ House Builder — drag to include</div>
+      <div class="chip-row">
+        <span class="chip on"><span class="g">⠿</span> Street Sheet</span>
+        <span class="chip on"><span class="g">⠿</span> Geofencing</span>
+        <span class="chip on"><span class="g">⠿</span> Academy</span>
+        <span class="chip on"><span class="g">⠿</span> Pulse</span>
+        <span class="chip"><span class="g">⠿</span> Campaigns</span>
+        <span class="chip"><span class="g">⠿</span> Commissions</span>
+        <span class="chip"><span class="g">⠿</span> Contracts</span>
+        <span class="chip"><span class="g">⠿</span> Leaderboard</span>
+      </div>
+      <div class="bh" style="margin-top:14px">Training topics — pick, Pivot builds</div>
+      <div class="chip-row">
+        <span class="chip on">Door approach</span>
+        <span class="chip on">Objection handling</span>
+        <span class="chip">Closing</span>
+        <span class="chip">Referrals</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band">
+  <h2 class="sec-h">How training gets built</h2>
+  <p class="sec-lead">Per your call: it's a service, not a self-serve library. The platform is the delivery vehicle; Pivot is the content engine.</p>
+  <div class="cards">
+    <div class="card">
+      <h4>1 · Company chooses topics</h4>
+      <p>In the House Builder they check the skills they want — door approach, objections, closing, product-specific pitches — or Pivot recommends a set from a discovery conversation.</p>
+    </div>
+    <div class="card">
+      <h4>2 · Pivot builds it for a fee</h4>
+      <p>Pivot produces the lessons/scripts and loads them into that company's house. Priced per course or as a build package — high-margin services on top of the seat license.</p>
+    </div>
+    <div class="card">
+      <h4>3 · It lands where reps work</h4>
+      <p>Lessons appear on My Day; scripts surface on the Street Sheet triggered by the rep's own dispositions. Certification badges show on the Leaderboard.</p>
+    </div>
+    <div class="card">
+      <h4>4 · Pulse closes the loop</h4>
+      <p>Pulse and the accountability data tell Pivot which reps need which coaching next — so the training keeps targeting the real gap instead of a generic curriculum.</p>
+    </div>
+  </div>
+</section>
+
+<section class="band">
+  <h2 class="sec-h">Proposed pricing model <span style="font-weight:600;font-size:15px;color:var(--muted)">— draft to calibrate</span></h2>
+  <p class="sec-lead">Anchored to what we pulled: SPOTIO runs $39 / $69 / $129 per user (annual only, 5-seat minimum), SalesRabbit ~$49–75. Doorline's edge is monthly billing and <b>only reps billed</b>. These numbers are a starting point, not a decision.</p>
+  <div style="overflow-x:auto">
+  <table class="ptable">
+    <thead><tr><th>Tier</th><th>What it is</th><th>Draft price</th><th>Billing note</th></tr></thead>
+    <tbody>
+      <tr><td><b>Track</b></td><td>Street sheet + tracking + geofencing</td><td class="num">$35 / rep / mo</td><td>The wedge — undercuts SPOTIO Team</td></tr>
+      <tr><td><b>Train</b></td><td>Track + Pivot Academy &amp; scripts</td><td class="num">$65 / rep / mo</td><td>+ one-time content build fees</td></tr>
+      <tr><td><b>Pulse</b></td><td>Wellness &amp; risk copilot</td><td class="num">+$18 / rep / mo</td><td>Add-on to any tier</td></tr>
+      <tr><td><b>House</b></td><td>White-label branded platform</td><td class="num">$750+/mo + $25/rep</td><td>+ setup &amp; training services</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="callout"><b>Keep the "managers are free" lever.</b><p>Across every tier, bill only field reps. A 10-person crew with 3 managers pays for 7 — a structural 30% cost advantage no per-seat competitor can match without changing their billing model. That's the headline, not the sticker price.</p></div>
+</section>
+
+<section class="band">
+  <h2 class="sec-h">What's live vs. what we build</h2>
+  <p class="sec-lead">So the scope is honest and the roadmap is clear.</p>
+  <div class="feas">
+    <div class="fbox"><div class="s live">● Live today</div><h4>Track</h4><p>Street sheet, tracking, geofencing, office rollup, territories — all shipping in the app now.</p></div>
+    <div class="fbox"><div class="s build">● To build</div><h4>Train</h4><p>An in-app lessons/scripts layer + the disposition-triggered surfacing. Content is a Pivot service.</p></div>
+    <div class="fbox"><div class="s build">● To build</div><h4>Pulse</h4><p>An analytics/AI layer over existing tracking data + rep and manager surfaces. No new data collected.</p></div>
+    <div class="fbox"><div class="s build">● To build</div><h4>House</h4><p>White-label branding depth, per-company config, the drag-and-drop builder, and the Pivot parent dashboard.</p></div>
+  </div>
+</section>
+
+<footer class="foot">
+  Draft offer architecture for Doorline × Pivot. Prices and tier names are recommendations to react to — nothing here is published or live except the Track feature set.
+</footer>
+</div>
+<script>
+const r=document.documentElement, tt=document.getElementById('tt');
+tt.addEventListener('click',()=>{const cur=r.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');r.setAttribute('data-theme',cur==='dark'?'light':'dark');});
+</script>

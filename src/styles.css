@@ -139,6 +139,7 @@ label.field > span { display: block; font-size: 13px; color: var(--muted); margi
 .cards { display: grid; gap: 14px; }
 .grid-3 { grid-template-columns: repeat(3, 1fr); }
 .grid-4 { grid-template-columns: repeat(4, 1fr); }
+.grid-5 { grid-template-columns: repeat(5, 1fr); }
 .grid-2 { grid-template-columns: repeat(2, 1fr); }
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .between { justify-content: space-between; }
@@ -384,8 +385,8 @@ tr.rep-row:hover .rep-link { text-decoration: underline; }
   .side .spacer { display: none; }
   .nav-label { display: none; }
   .who { display: none; }
-  .grid-3, .grid-4, .grid-2 { grid-template-columns: 1fr 1fr; }
+  .grid-3, .grid-4, .grid-5, .grid-2 { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 560px) {
-  .grid-3, .grid-4, .grid-2 { grid-template-columns: 1fr; }
+  .grid-3, .grid-4, .grid-5, .grid-2 { grid-template-columns: 1fr; }
 }

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useStore, getState, login } from "../store";
 import { DEMO } from "../supabaseClient";
-import { signIn as authSignIn, signUp as authSignUp } from "../api/auth";
+import { signIn as authSignIn, signUp as authSignUp, signOut as authSignOut } from "../api/auth";
 import { initLive } from "../api/bootstrap";
 import { useTheme, toggleTheme } from "../theme.js";
 import Logo from "../components/Logo.jsx";
@@ -29,7 +29,16 @@ export default function Login({ onBack }) {
       // Live mode: real Supabase Auth, then hydrate + subscribe.
       const { error } = await authSignIn(em.trim(), pw);
       if (error) return setErr(error.message);
-      await initLive();
+      // The password can be correct while the account still can't load -- if
+      // the profile row is missing or unreadable, initLive() returns null and
+      // nothing sets a session, so the user silently lands back on this
+      // screen. That is indistinguishable from a wrong password unless we say
+      // so. Sign the half-open session back out and name the real problem.
+      const profile = await initLive();
+      if (!profile) {
+        await authSignOut().catch(() => {});
+        return setErr("Your password is correct, but this account isn't set up for a team yet. Ask your admin to add you (Personnel → Add person) — no need to change your password.");
+      }
       return;
     }
     const r = login(em.trim(), pw);
@@ -41,9 +50,12 @@ export default function Login({ onBack }) {
   const submitSignup = async (e) => {
     e?.preventDefault?.();
     setErr(""); setNotice("");
-    if (!fullName.trim() || !orgName.trim() || !email.trim() || pass.length < 6) {
-      return setErr("Fill in your name, company, email, and a password of at least 6 characters.");
+    if (!fullName.trim() || !email.trim() || pass.length < 6) {
+      return setErr("Fill in your name, email, and a password of at least 6 characters.");
     }
+    // orgName is only used to name the company on a brand-new install; an
+    // ordinary signup joins the existing team (see migration 0018), so it is
+    // no longer asked for here.
     const { data, error } = await authSignUp(email.trim(), pass, fullName.trim(), orgName.trim());
     if (error) return setErr(error.message);
     if (data?.session) { await initLive(); return; } // email confirmation off — signed in immediately
@@ -65,10 +77,9 @@ export default function Login({ onBack }) {
 
         {!DEMO && mode === "signup" ? (
           <form onSubmit={submitSignup}>
-            <label className="field">
-              <span>Company name</span>
-              <input className="input" value={orgName} onChange={(e) => setOrgName(e.target.value)} placeholder="Acme Solar" />
-            </label>
+            <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
+              Creating an account adds you to the team as a field rep. Your manager can change your role afterwards.
+            </p>
             <label className="field">
               <span>Your name</span>
               <input className="input" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Jamie Rivera" />
@@ -83,7 +94,7 @@ export default function Login({ onBack }) {
               <input className="input" type="password" value={pass} autoComplete="new-password"
                 onChange={(e) => setPass(e.target.value)} placeholder="At least 6 characters" />
             </label>
-            <button className="btn primary" type="submit" style={{ width: "100%" }}>Create your organization</button>
+            <button className="btn primary" type="submit" style={{ width: "100%" }}>Create my account</button>
           </form>
         ) : (
           <form onSubmit={submit}>
@@ -104,7 +115,7 @@ export default function Login({ onBack }) {
         {!DEMO && (
           <p style={{ textAlign: "center", marginTop: 10, marginBottom: 0 }}>
             <a onClick={() => { setErr(""); setNotice(""); setMode(mode === "signup" ? "signin" : "signup"); }} style={{ cursor: "pointer", fontSize: 13, color: "var(--brand)" }}>
-              {mode === "signup" ? "Already have an account? Sign in" : "New company? Create your organization"}
+              {mode === "signup" ? "Already have an account? Sign in" : "New to the team? Create an account"}
             </a>
           </p>
         )}

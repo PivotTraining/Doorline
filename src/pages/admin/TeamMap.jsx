@@ -1,7 +1,8 @@
-import { useStore, getState, DISPOS, repAccountability, repGeofenceStatus } from "../../store";
+import { useStore, getState, DISPOS, repAccountability, repGeofenceStatus, geofenceAlerts } from "../../store";
 import FieldMap from "../../components/FieldMap.jsx";
 
 const dur = (m) => (m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`);
+const since = (ts) => { const m = Math.max(0, Math.round((Date.now() - ts) / 60000)); return m < 1 ? "just now" : `${m}m ago`; };
 
 export default function TeamMap() {
   useStore();
@@ -9,6 +10,7 @@ export default function TeamMap() {
   const worked = state.homes.filter((h) => h.status !== "untouched");
   const counts = Object.keys(DISPOS).reduce((a, k) => ({ ...a, [k]: state.homes.filter((h) => h.status === k).length }), {});
   const reps = state.users.filter((u) => u.role === "rep");
+  const alerts = geofenceAlerts();
 
   return (
     <>
@@ -18,6 +20,22 @@ export default function TeamMap() {
           <p>Every door across the org, each rep's route, and live positions. Toggle "Routes" on the map.</p>
         </div>
       </div>
+
+      {alerts.length > 0 && (
+        <div className="card" style={{ marginBottom: 18, borderColor: "var(--red)" }}>
+          <div className="row" style={{ gap: 8, alignItems: "center", marginBottom: alerts.length ? 8 : 0 }}>
+            <span style={{ fontSize: 18 }}>📍⚠️</span>
+            <b>Outside assigned zone right now</b>
+          </div>
+          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+            {alerts.map((a) => (
+              <span key={a.repId} className="pill" style={{ borderColor: "var(--red)", color: "var(--red)" }}>
+                <span className="dot" style={{ background: "var(--red)" }} /> {a.repName} — outside {a.zoneName} · {since(a.at)}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="cards grid-4" style={{ marginBottom: 18 }}>
         <div className="card stat"><div className="n">{state.homes.length}</div><div className="l">Total doors</div></div>
