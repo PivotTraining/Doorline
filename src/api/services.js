@@ -34,7 +34,21 @@ export async function loadAll() {
   };
 }
 
-export const upsertHome      = (h)      => supabase.from("homes").upsert(M.homeToRow(h, org()));
+// Same degradation contract as upsertStreetRow below: if the database
+// predates 0019 it has no owner_name/serviced column and PostgREST rejects
+// the whole row (PGRST204). Retry once without the 0019 fields so the
+// disposition still saves -- losing the owner name is recoverable, losing
+// the knock is not. Doors that carry neither field never take this path.
+export const upsertHome = async (h) => {
+  const row = M.homeToRow(h, org());
+  const res = await supabase.from("homes").upsert(row);
+  const missing = res?.error && /owner_name|serviced/.test(res.error.message || "");
+  if (missing && ("owner_name" in row || "serviced" in row)) {
+    const { owner_name, serviced, ...legacy } = row;
+    return supabase.from("homes").upsert(legacy);
+  }
+  return res;
+};
 export const upsertDeal      = (d)      => supabase.from("deals").upsert(M.dealToRow(d, org()));
 export const deleteDeal      = (id)     => supabase.from("deals").delete().eq("id", id);
 export const upsertProfile   = (u)      => supabase.from("profiles").upsert(M.profileToRow(u, org()));
@@ -83,6 +97,30 @@ export async function loadReports() {
     };
   } catch { return null; }
 }
+export const upsertRoute     = (rt)     => supabase.from("routes").upsert(M.routeToRow(rt, org()));
+export const deleteRoute     = (id)     => supabase.from("routes").delete().eq("id", id);
+export const upsertRouteStop = (s)      => supabase.from("route_stops").upsert(M.routeStopToRow(s, org()));
+export const deleteRouteStop = (id)     => supabase.from("route_stops").delete().eq("id", id);
+
+// Best-effort route load, deliberately kept OUT of loadAll's Promise.all for
+// the same reason loadReports is: on a database that hasn't run 0019 these
+// tables don't exist, and a rejected read inside the Promise.all would take
+// the whole boot down with it. Returns null on any error and the app simply
+// runs without routes.
+export async function loadRoutes() {
+  try {
+    const [routes, stops] = await Promise.all([
+      supabase.from("routes").select("*").order("created_at", { ascending: false }),
+      supabase.from("route_stops").select("*").order("seq"),
+    ]);
+    if (routes.error || stops.error) return null;
+    return {
+      routes: (routes.data || []).map(M.routeFromRow),
+      routeStops: (stops.data || []).map(M.routeStopFromRow),
+    };
+  } catch { return null; }
+}
+
 export const upsertOrg       = (o)      => supabase.from("organizations").update({
   name: o.name, logo_path: o.logo, followup: o.followup, products: o.products,
   home_zip: o.homeZip || null, home_lat: o.homeLat ?? null, home_lng: o.homeLng ?? null,

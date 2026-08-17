@@ -27,6 +27,8 @@ const HANDLERS = {
   organizations: { upsert: S.upsertOrg, del: () => {} },
   report_batches: { upsert: S.upsertReportBatch, del: S.deleteReportBatch },
   report_rows: { upsert: S.upsertReportRow, del: S.deleteReportRow },
+  routes: { upsert: S.upsertRoute, del: S.deleteRoute },
+  route_stops: { upsert: S.upsertRouteStop, del: S.deleteRouteStop },
 };
 
 // Publish many report rows at once (one insert instead of N). Falls back to

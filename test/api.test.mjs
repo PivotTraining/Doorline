@@ -13,6 +13,8 @@ import { segmentReport, buildRepIndex } from "../src/lib/reports.js";
 import { dealCommission, repEarnings, campaignByName } from "../src/lib/commission.js";
 import { normalizeCampaign as _nc } from "../src/lib/campaigns.js";
 import { localDay, localDayInTZ } from "../src/lib/date.js";
+import { haversineM, orderStops, routeLengthM, fmtDistance } from "../src/lib/route.js";
+import { detectColumns, mapParcelRows } from "../src/lib/parcels.js";
 
 test("home round-trips through row mapping", () => {
   const h = { id: "h1", repId: "r1", addr: "1 Maple", lat: 33.7, lng: -84.3, status: "appt",
@@ -368,4 +370,156 @@ test("locationQueue backoff grows with consecutive failures", () => {
   assert.equal(q.nextDelay(1000), 1000); // 0 failures
   q.enqueue({ lat: 1, lng: 1 });
   return q.flush().then(() => { assert.equal(q.nextDelay(1000), 2000); }); // 1 failure → doubled
+});
+
+// ---------------------------------------------------------------
+// 0019: homeowner name, serviced flag, route planning
+// ---------------------------------------------------------------
+
+test("homeToRow omits owner_name/serviced when unset (pre-0019 databases keep accepting door saves)", () => {
+  // The whole compatibility story for 0019. A database that hasn't run the
+  // migration has no owner_name/serviced column, and PostgREST rejects the
+  // ENTIRE row when it sees an unknown one -- so an ordinary door save must
+  // send a payload byte-identical to the pre-feature one, or every rep on an
+  // un-migrated database silently loses every door.
+  const plain = { id: "h1", repId: "r1", addr: "1 Maple", lat: 33.7, lng: -84.3, status: "untouched" };
+  const row = M.homeToRow(plain, "org1");
+  assert.ok(!("owner_name" in row), "owner_name must be absent when there is no owner name");
+  assert.ok(!("serviced" in row), "serviced must be absent when the door isn't a customer");
+});
+
+test("homeToRow includes owner_name/serviced once they carry a value, and round-trips", () => {
+  const h = { id: "h1", repId: "r1", addr: "1 Maple", lat: 33.7, lng: -84.3, status: "appt",
+    ownerName: "Joseph Lewis", serviced: true };
+  const row = M.homeToRow(h, "org1");
+  assert.equal(row.owner_name, "Joseph Lewis");
+  assert.equal(row.serviced, true);
+  const back = M.homeFromRow(row);
+  assert.equal(back.ownerName, "Joseph Lewis");
+  assert.equal(back.serviced, true);
+});
+
+test("homeFromRow defaults the 0019 fields for rows that predate the migration", () => {
+  const back = M.homeFromRow({ id: "h1", rep_id: "r1", addr: "1 Maple", lat: 1, lng: 2, status: "untouched" });
+  assert.equal(back.ownerName, "");
+  assert.equal(back.serviced, false);
+});
+
+test("route and route stop round-trip through row mapping", () => {
+  const rt = { id: "rt1", repId: "r1", name: "Maple loop", day: "2026-08-14" };
+  const backRt = M.routeFromRow(M.routeToRow(rt, "org1"));
+  assert.equal(backRt.name, "Maple loop");
+  assert.equal(backRt.repId, "r1");
+  assert.equal(backRt.day, "2026-08-14");
+
+  const st = { id: "s1", routeId: "rt1", homeId: "h1", seq: 3, done: true };
+  const backSt = M.routeStopFromRow(M.routeStopToRow(st, "org1"));
+  assert.deepEqual(backSt, st);
+});
+
+test("haversineM matches a known distance", () => {
+  // One degree of latitude is ~111.2 km anywhere on the globe.
+  const d = haversineM({ lat: 0, lng: 0 }, { lat: 1, lng: 0 });
+  assert.ok(Math.abs(d - 111195) < 500, `expected ~111195 m, got ${Math.round(d)}`);
+  assert.equal(haversineM({ lat: 5, lng: 5 }, { lat: 5, lng: 5 }), 0);
+});
+
+test("orderStops walks a shuffled street in geographic order", () => {
+  // Six houses down one side of a street, handed over shuffled.
+  const street = [0, 1, 2, 3, 4, 5].map((i) => ({ id: `h${i}`, lat: 33.7, lng: -84.3 + i * 0.001 }));
+  const shuffled = [street[3], street[0], street[5], street[1], street[4], street[2]];
+  const ordered = orderStops(shuffled, { lat: 33.7, lng: -84.3 });
+  assert.deepEqual(ordered.map((s) => s.id), ["h0", "h1", "h2", "h3", "h4", "h5"]);
+});
+
+test("orderStops never walks further than the order it was given", () => {
+  const pts = [
+    { id: "a", lat: 33.700, lng: -84.300 },
+    { id: "b", lat: 33.710, lng: -84.300 },
+    { id: "c", lat: 33.701, lng: -84.300 },
+    { id: "d", lat: 33.711, lng: -84.300 },
+  ];
+  const start = { lat: 33.700, lng: -84.300 };
+  const ordered = orderStops(pts, start);
+  assert.ok(routeLengthM(ordered, start) <= routeLengthM(pts, start) + 1e-6);
+});
+
+test("orderStops leaves its input alone and drops coordinate-less stops", () => {
+  const pts = [
+    { id: "b", lat: 33.71, lng: -84.30 },
+    { id: "ghost" },                          // door with no coordinates yet
+    { id: "a", lat: 33.70, lng: -84.30 },
+  ];
+  const copy = JSON.parse(JSON.stringify(pts));
+  const ordered = orderStops(pts, { lat: 33.70, lng: -84.30 });
+  assert.deepEqual(pts, copy, "input array must not be mutated");
+  assert.deepEqual(ordered.map((s) => s.id), ["a", "b"]);
+});
+
+test("orderStops is a no-op on trivial input", () => {
+  assert.deepEqual(orderStops([], null), []);
+  assert.deepEqual(orderStops(null, null), []);
+  const one = [{ id: "a", lat: 1, lng: 2 }];
+  assert.deepEqual(orderStops(one, null), one);
+});
+
+test("fmtDistance switches units at sensible thresholds", () => {
+  assert.equal(fmtDistance(0), "—");
+  assert.equal(fmtDistance(-5), "—");
+  assert.match(fmtDistance(100), /ft$/);
+  assert.match(fmtDistance(5000), /mi$/);
+  assert.match(fmtDistance(500, { imperial: false }), /m$/);
+  assert.match(fmtDistance(5000, { imperial: false }), /km$/);
+});
+
+test("detectColumns recognises the header names county extracts actually use", () => {
+  const c = detectColumns(["Property Address", "Owner Name", "Latitude", "Longitude"]);
+  assert.equal(c.addr, "Property Address");
+  assert.equal(c.ownerName, "Owner Name");
+  assert.equal(c.lat, "Latitude");
+  assert.equal(c.lng, "Longitude");
+});
+
+test("detectColumns prefers an exact header over a longer lookalike", () => {
+  // A sheet with both "Owner" and "Owner Mailing Address" must bind to Owner.
+  const c = detectColumns(["Owner Mailing Address", "Owner", "addr", "lat", "lng"]);
+  assert.equal(c.ownerName, "Owner");
+});
+
+test("mapParcelRows pulls owner names and skips rows it cannot place", () => {
+  const headers = ["address", "owner", "lat", "lng"];
+  const rows = [
+    { address: "165 Jackson Dr", owner: "Joseph Lewis", lat: "33.7", lng: "-84.3" },
+    { address: "167 Jackson Dr", owner: "", lat: "", lng: "" },        // ungeocoded
+    { address: "", owner: "Nobody", lat: "33.7", lng: "-84.3" },        // no address
+    { address: "169 Jackson Dr", owner: "Ada Chen", lat: "0", lng: "0" }, // null island
+  ];
+  const { parcels, skipped } = mapParcelRows(rows, headers);
+  assert.equal(parcels.length, 1);
+  assert.deepEqual(parcels[0], { addr: "165 Jackson Dr", ownerName: "Joseph Lewis", lat: 33.7, lng: -84.3, serviced: false });
+  assert.equal(skipped.length, 3, "unplaceable rows are reported, never silently dropped");
+});
+
+test("mapParcelRows reads an existing-customer column when the extract has one", () => {
+  const headers = ["address", "owner", "lat", "lng", "customer"];
+  const rows = [
+    { address: "1 A St", owner: "X", lat: "1", lng: "2", customer: "yes" },
+    { address: "2 A St", owner: "Y", lat: "1", lng: "2", customer: "no" },
+  ];
+  const { parcels } = mapParcelRows(rows, headers);
+  assert.equal(parcels[0].serviced, true);
+  assert.equal(parcels[1].serviced, false);
+});
+
+test("mapParcelRows accepts a caller override for a mis-detected column", () => {
+  const headers = ["site", "who", "lat", "lng"];
+  const rows = [{ site: "9 B St", who: "Pat Ray", lat: "5", lng: "6" }];
+  const { parcels } = mapParcelRows(rows, headers, { addr: "site", ownerName: "who" });
+  assert.equal(parcels[0].addr, "9 B St");
+  assert.equal(parcels[0].ownerName, "Pat Ray");
+});
+
+test("mapParcelRows survives an empty or headerless file", () => {
+  assert.deepEqual(mapParcelRows([], []).parcels, []);
+  assert.deepEqual(mapParcelRows(null, null).parcels, []);
 });
