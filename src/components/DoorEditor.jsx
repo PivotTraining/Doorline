@@ -2,7 +2,20 @@ import { useState } from "react";
 import Modal from "./Modal.jsx";
 import { DISPOS, activeProducts, ACTIONS, ACTION_LAB, setDoor, logActivity } from "../store";
 
-const fmtTime = (ts) => new Date(ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+// Activity stamps carry a DATE, not just a clock time. A door gets worked
+// across multiple passes, and "3:42 PM" with no day made last week's knock
+// indistinguishable from this morning's -- the exact question a rep opens
+// this panel to answer.
+const fmtWhen = (ts) => {
+  const d = new Date(ts);
+  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return `Today ${time}`;
+  const yday = new Date(now); yday.setDate(now.getDate() - 1);
+  if (d.toDateString() === yday.toDateString()) return `Yesterday ${time}`;
+  const sameYear = d.getFullYear() === now.getFullYear();
+  return `${d.toLocaleDateString([], { month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) })} ${time}`;
+};
 
 // Disposition + deal capture for a single door.
 // Picking "Sold" reveals the deal form; saving writes through the store.
@@ -13,6 +26,8 @@ export default function DoorEditor({ door, onClose }) {
   const [status, setStatus] = useState(door.status === "untouched" ? "" : door.status);
   const [notes, setNotes] = useState(door.notes || "");
   const [contact, setContact] = useState(door.contact || "");
+  const [ownerName, setOwnerName] = useState(door.ownerName || "");
+  const [serviced, setServiced] = useState(!!door.serviced);
   const [phone, setPhone] = useState(door.phone || "");
   const [due, setDue] = useState(door.due || "");
   const [deal, setDeal] = useState(door.deal || { customer: "", product: products[0], value: "" });
@@ -24,7 +39,7 @@ export default function DoorEditor({ door, onClose }) {
   };
 
   const save = () => {
-    const fields = { status: status || "untouched", notes, contact, phone, due };
+    const fields = { status: status || "untouched", notes, contact, phone, due, ownerName, serviced };
     if (status === "sold" && !door.deal) {
       fields.deal = { customer: deal.customer, product: deal.product, value: Number(deal.value) || 0 };
     }
@@ -43,9 +58,26 @@ export default function DoorEditor({ door, onClose }) {
         </>
       }
     >
+      {/* Who lives here, read before the knock — the single most useful thing
+          to have on screen when the door opens. */}
+      {ownerName && (
+        <p style={{ margin: "0 0 2px", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.3 }}>
+          {ownerName}
+        </p>
+      )}
       <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
         {door.lat.toFixed(5)}, {door.lng.toFixed(5)}
       </p>
+
+      {/* Already on the books. Distinct from "sold" (which means this rep
+          closed it on this pass) and it survives re-loops, so a rep doesn't
+          pitch an existing customer. */}
+      {serviced && (
+        <div className="card" style={{ marginBottom: 14, background: "var(--bg-2)", padding: "8px 12px" }}>
+          <strong style={{ fontSize: 13 }}>✅ Already a customer</strong>
+          <div className="muted" style={{ fontSize: 12 }}>This address is already served — check before pitching.</div>
+        </div>
+      )}
 
       <span style={{ display: "block", fontSize: 13, color: "var(--muted)", marginBottom: 6 }}>Quick log</span>
       <div className="row" style={{ marginBottom: acts.length ? 10 : 14 }}>
@@ -58,7 +90,7 @@ export default function DoorEditor({ door, onClose }) {
       {acts.length > 0 && (
         <div className="muted" style={{ fontSize: 12, marginBottom: 14, display: "grid", gap: 2 }}>
           {acts.map((a, i) => (
-            <div key={i}>• {ACTION_LAB[a.type]?.lab || a.type} <span style={{ opacity: 0.7 }}>· {fmtTime(a.ts)}</span></div>
+            <div key={i}>• {ACTION_LAB[a.type]?.lab || a.type} <span style={{ opacity: 0.7 }}>· {fmtWhen(a.ts)}</span></div>
           ))}
         </div>
       )}
@@ -103,9 +135,20 @@ export default function DoorEditor({ door, onClose }) {
         </div>
       )}
 
+      {/* Owner vs contact are deliberately separate: the owner is who the
+          property record says lives here (imported ahead of the knock), the
+          contact is whoever actually answered the door. */}
+      <label className="field">
+        <span>Homeowner</span>
+        <input className="input" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} placeholder="On the property record" />
+      </label>
       <label className="field">
         <span>Contact name</span>
         <input className="input" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="Who you spoke to" />
+      </label>
+      <label className="row" style={{ alignItems: "center", gap: 8, marginBottom: 14, cursor: "pointer" }}>
+        <input type="checkbox" checked={serviced} onChange={(e) => setServiced(e.target.checked)} />
+        <span style={{ fontSize: 14 }}>Already a customer (don't pitch)</span>
       </label>
       <label className="field">
         <span>Phone</span>

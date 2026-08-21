@@ -210,8 +210,10 @@ export default function FieldMap({ repId = null, admin = false, height = 540 }) 
             {admin && (
               <Popup>
                 <strong>{h.addr}</strong>
+                {h.ownerName && <><br /><small style={{ textTransform: "uppercase", letterSpacing: 0.3 }}>{h.ownerName}</small></>}
                 <br />
                 <span style={{ color: DISPOS[h.status].hex }}>● {DISPOS[h.status].lab}</span>
+                {h.serviced && <><br /><small>✅ Already a customer</small></>}
                 <br />
                 <small>{repName(state, h.repId)}</small>
                 {h.notes && <><br /><small>{h.notes}</small></>}
