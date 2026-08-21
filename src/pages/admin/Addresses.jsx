@@ -30,6 +30,13 @@ export default function Addresses() {
 
   const onFile = async (e) => {
     const f = e.target.files?.[0];
+    // Clear the input immediately so choosing the same file AGAIN still fires
+    // a change event. Without this, re-importing a refreshed extract that
+    // keeps its filename (parcels.csv week after week -- the exact workflow
+    // this page advertises) silently does nothing: the browser sees an
+    // unchanged file list and never dispatches change. The File object read
+    // below stays valid after the value reset.
+    e.target.value = "";
     if (!f) return;
     setErr(""); setResult(null);
     try {
