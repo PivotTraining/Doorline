@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { getState, useStore, sheetTotals, SHEET_COLS } from "../../store";
 import { downloadCSV } from "../../lib/csv.js";
 import { localDay } from "../../lib/date.js";
@@ -10,16 +10,19 @@ export default function DailyCloseouts() {
   const state = getState();
   const [date, setDate] = useState(localDay());
   const reps = state.users.filter((u) => u.role === "rep");
-  const summary = useMemo(() => reps.map((rep) => {
+  const summary = reps.map((rep) => {
     const rows = state.streetRows.filter((r) => r.repId === rep.id && r.date === date);
     const receipt = state.submittedDays[`${rep.id}|${date}`] || null;
     return { rep, rows, receipt, totals: sheetTotals(rows) };
-  }), [state.streetRows, state.submittedDays, state.users, date]);
+  });
   const submitted = summary.filter((s) => s.receipt).length;
   const all = state.streetRows.filter((r) => r.date === date && reps.some((u) => u.id === r.repId));
   const totals = sheetTotals(all);
   const exportAll = () => {
-    const records = summary.flatMap(({ rep, rows, receipt }) => rows.map((r) => ({
+    const records = summary.flatMap(({ rep, rows, receipt }) => (rows.length ? rows : [{
+      slot: "", street: "", nh: false, rl: false, dm: false, bid: false,
+      d: false, ni: false, nq: false, customer: "", phone: "", comments: "", cb: "",
+    }]).map((r) => ({
       Date: date, Agent: rep.name, Email: rep.email, Status: receipt ? "Submitted" : "In progress",
       Slot: r.slot || "", Street: r.street, "Not Home": r.nh ? 1 : 0,
       Reloop: r.rl ? 1 : 0, "Decision Maker": r.dm ? 1 : 0,
@@ -41,7 +44,7 @@ export default function DailyCloseouts() {
         </div>
         <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
           <input aria-label="Report date" className="input" type="date" style={{ width: "auto" }} value={date} onChange={(e) => setDate(e.target.value)} />
-          <button className="btn primary" onClick={exportAll} disabled={all.length === 0}>↓ Export company CSV</button>
+          <button className="btn primary" onClick={exportAll} disabled={reps.length === 0}>↓ Export company CSV</button>
         </div>
       </div>
       <div className="cards grid-4" style={{ marginBottom: 14 }}>
