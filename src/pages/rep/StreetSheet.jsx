@@ -107,7 +107,9 @@ export default function StreetSheet({ user }) {
   const state = getState();
   const [date, setDate] = useState(today());
   const [extraSlots, setExtraSlots] = useState(0);
-  const [closeoutNotes, setCloseoutNotes] = useState("");
+  const [closeoutNotes, setCloseoutNotes] = useState(
+    () => getState().submittedDays[`${user.id}|${today()}`]?.notes || ""
+  );
   useEffect(() => { setExtraSlots(0); }, [date]);
   const autoToday = useRef(true); // false once the rep explicitly picks a different date
 
@@ -124,6 +126,10 @@ export default function StreetSheet({ user }) {
   const rows = state.streetRows.filter((r) => r.repId === user.id && r.date === date);
   const t = sheetTotals(rows);
   const submitted = isDaySubmitted(user.id, date);
+  const submittedNotes = state.submittedDays[`${user.id}|${date}`]?.notes || "";
+  useEffect(() => {
+    if (submitted) setCloseoutNotes(submittedNotes);
+  }, [submitted, submittedNotes, date]);
   const missingDisposition = rows.filter((r) => !SHEET_COLS.some((c) => r[c.key]) && !r.cb).length;
   const products = activeProducts();
   const dealsById = Object.fromEntries(state.deals.map((d) => [d.id, d]));
