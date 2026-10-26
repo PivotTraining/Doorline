@@ -53,7 +53,9 @@ export default function RepTracker({ user }) {
       if (watch != null) navigator.geolocation.clearWatch(watch);
       clearInterval(heartbeat);
       if (sim) clearInterval(sim);
-      endSession(repId).catch(() => {});
+      // On account sign-out, logout() has already written the final offline
+      // presence update. A second unmount write could race it or outlive Auth.
+      if (getState().sessionId === repId) endSession(repId).catch(() => {});
     };
   }, [granted, repId]);
 
