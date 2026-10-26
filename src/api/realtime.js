@@ -3,7 +3,7 @@
 import { supabase } from "../supabaseClient";
 
 const TABLES = ["homes", "deals", "posts", "location_tracks", "street_rows", "territories",
-  "profiles", "report_batches", "report_rows"];
+  "profiles", "report_batches", "report_rows", "agent_presence", "daily_submissions"];
 
 export function subscribeOrg(orgId, onChange) {
   const ch = supabase.channel(`org:${orgId}`);
