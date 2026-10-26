@@ -217,7 +217,17 @@ function hydrate(s) {
 
 // ---------- state + subscription ----------
 function load() { try { return JSON.parse(localStorage.getItem(KEY)); } catch { return null; } }
-let state = hydrate(load()) || seed();
+// Real accounts must never inherit another person's browser-wide demo cache.
+// Unsynced live edits survive through their authenticated, tenant-scoped write queue.
+function blankLive() {
+  return {
+    org: { name: "Doorline", logo: null, homeZip: null, homeLat: null, homeLng: null },
+    users: [], homes: [], deals: [], posts: [], territories: [], tracks: {},
+    presence: {}, streetRows: [], submittedDays: {},
+    reportBatches: [], reportRows: [], sessionId: null,
+  };
+}
+let state = hydrate(DEMO ? load() : blankLive()) || seed();
 let version = 0;
 const listeners = new Set();
 
@@ -230,6 +240,9 @@ const idle = typeof requestIdleCallback === "function"
   : (fn) => setTimeout(fn, 250);
 function persistNow() {
   persistScheduled = false;
+  // Never cache one company's people, locations or customer records in a
+  // device-wide key that another authenticated agent could later inherit.
+  if (!DEMO) return;
   try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* quota/serialization */ }
 }
 function schedulePersist() { if (!persistScheduled) { persistScheduled = true; idle(persistNow); } }
@@ -245,7 +258,7 @@ if (typeof window !== "undefined") {
   // Skipped if this tab has its own unsaved edits pending, so we never
   // clobber local work with a stale snapshot from another tab.
   window.addEventListener("storage", (e) => {
-    if (e.key !== KEY || e.newValue == null || persistScheduled) return;
+    if (!DEMO || e.key !== KEY || e.newValue == null || persistScheduled) return;
     try {
       const incoming = hydrate(JSON.parse(e.newValue));
       // Adopt the other tab's data, but never its session — each tab is
@@ -310,7 +323,9 @@ export function login(email, pass) {
 export function logout() {
   const user = currentUser();
   const finalPresence = user?.role === "rep" ? endSession(user.id) : Promise.resolve();
-  state.sessionId = null; emit();
+  if (DEMO) state.sessionId = null;
+  else state = hydrate(blankLive());
+  emit();
   if (!DEMO) {
     Promise.resolve(finalPresence).catch(() => {}).finally(() => {
       supabase.auth.signOut().catch(() => {});
