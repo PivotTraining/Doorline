@@ -46,6 +46,18 @@ Deno.serve(async (req) => {
   const role = ALLOWED_ROLES.includes(String(body.role)) ? String(body.role) : "rep";
   if (!email || !name) return json({ error: "missing_fields" }, 400);
 
+  // The same one-use company invitation powers admin-created accounts and
+  // self-enrollment. This avoids trusting forgeable user_metadata authorization
+  // flags and guarantees the auth trigger joins this administrator's org.
+  const { data: inviteToken, error: inviteError } = await asUser.rpc("create_company_invite", {
+    p_max_uses: 1,
+    p_expires_days: 1,
+  });
+  if (inviteError || !inviteToken) return json({
+    error: "invite_failed",
+    detail: inviteError?.message ?? "Could not issue a company-bound invitation.",
+  }, 400);
+
   // A temporary password the admin relays to the new hire (they can be
   // prompted to change it later). Admin may also supply their own.
   const tempPassword = (typeof body.password === "string" && body.password.length >= 6)
@@ -56,16 +68,14 @@ Deno.serve(async (req) => {
     email,
     password: tempPassword,
     email_confirm: true,
-    // doorline_invited lives in user_metadata (set atomically at INSERT) so
-    // the handle_new_user trigger reliably steps aside — see migration 0013.
-    user_metadata: { full_name: name, doorline_invited: true },
+    // Migration 0019 validates this one-use invite *inside* the auth.users
+    // insertion transaction and creates a rep profile in the correct company.
+    user_metadata: { full_name: name, doorline_invite: inviteToken },
   });
   if (cErr || !created?.user) return json({ error: "create_failed", detail: cErr?.message ?? "no_user" }, 400);
 
   const free = FREE_ROLES.includes(role);
-  const { error: pErr } = await svc.from("profiles").insert({
-    id: created.user.id,
-    org_id: caller.org_id,
+  const { error: pErr } = await svc.from("profiles").update({
     full_name: name,
     email,
     role,
@@ -76,7 +86,7 @@ Deno.serve(async (req) => {
     home_zip: (body.homeZip as string) || null,
     home_lat: typeof body.homeLat === "number" ? body.homeLat : null,
     home_lng: typeof body.homeLng === "number" ? body.homeLng : null,
-  });
+  }).eq("id", created.user.id).eq("org_id", caller.org_id).select("id").single();
   if (pErr) {
     // Don't leave an orphan auth user if the profile couldn't be written.
     await svc.auth.admin.deleteUser(created.user.id);
