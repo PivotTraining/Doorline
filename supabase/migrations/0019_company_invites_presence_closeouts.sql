@@ -138,3 +138,36 @@ do $$ begin
     alter publication supabase_realtime add table public.daily_submissions;
   end if;
 end $$;
+
+
+-- Harden inherited door policies: reps must never create a row for another
+-- company's rep (or spoof another agent within their own company).
+drop policy if exists street_write on public.street_rows;
+create policy street_write on public.street_rows for all to authenticated
+  using (
+    org_id = public.current_org_id()
+    and (rep_id = auth.uid() or public.current_user_role() in ('owner','admin','manager'))
+  )
+  with check (
+    org_id = public.current_org_id()
+    and (rep_id = auth.uid() or public.current_user_role() in ('owner','admin','manager'))
+    and exists (
+      select 1 from public.profiles p
+      where p.id = rep_id and p.org_id = public.current_org_id()
+    )
+  );
+
+drop policy if exists homes_write on public.homes;
+create policy homes_write on public.homes for all to authenticated
+  using (
+    org_id = public.current_org_id()
+    and (rep_id = auth.uid() or public.current_user_role() in ('owner','admin','manager'))
+  )
+  with check (
+    org_id = public.current_org_id()
+    and (rep_id = auth.uid() or public.current_user_role() in ('owner','admin','manager'))
+    and (rep_id is null or exists (
+      select 1 from public.profiles p
+      where p.id = rep_id and p.org_id = public.current_org_id()
+    ))
+  );
