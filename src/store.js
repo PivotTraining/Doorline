@@ -397,7 +397,9 @@ export function setConsent(repId, consent) {
 export function isAgentLive(p, now = Date.now()) { return agentLive(p, now, DEMO); }
 export function startSession(repId) {
   const p = (state.presence[repId] = state.presence[repId] || {});
-  p.online = true; p.since = Date.now(); p.lastSeen = Date.now(); emit();
+  p.online = true; p.since = Date.now(); p.lastSeen = Date.now();
+  p.lat = null; p.lng = null; // never publish a previous shift’s last-known location
+  emit();
   return sync.presence({ repId, ...p }).catch(() => {});
 }
 export function heartbeatSession(repId) {
