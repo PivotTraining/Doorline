@@ -24,6 +24,7 @@ const HANDLERS = {
   posts: { upsert: S.upsertPost, del: S.deletePost },
   territories: { upsert: S.upsertTerritory, del: S.deleteTerritory },
   street_rows: { upsert: S.upsertStreetRow, del: S.deleteStreetRow },
+  daily_submissions: { upsert: S.upsertDailySubmission, del: S.deleteDailySubmission },
   organizations: { upsert: S.upsertOrg, del: () => {} },
   report_batches: { upsert: S.upsertReportBatch, del: S.deleteReportBatch },
   report_rows: { upsert: S.upsertReportRow, del: S.deleteReportRow },
@@ -81,6 +82,12 @@ function safe(promise) {
 
 export const activity = (homeId, type) => { if (live()) safe(S.recordActivity(homeId, type)); };
 export const consent = (granted) => { if (live()) safe(S.setConsentRpc(granted)); };
+export function presence(point) {
+  if (!live()) return Promise.resolve();
+  return S.upsertAgentPresence(point).then(({ error }) => {
+    if (error) { console.error("[doorline] agent presence failed:", error.message); throw error; }
+  });
+}
 export const assignTerritory = (tid, repId) => { if (live()) safe(S.assignTerritory(tid, repId)); };
 
 // ---- GPS firehose (client) ----
