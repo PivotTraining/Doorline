@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useStore, getState, login } from "../store";
+import { useStore, getState, login, waitForPendingSignout } from "../store";
 import { DEMO } from "../supabaseClient";
 import { signIn as authSignIn, signUp as authSignUp, signOut as authSignOut, invitedCompanyName } from "../api/auth";
 import { initLive } from "../api/bootstrap";
@@ -36,19 +36,22 @@ export default function Login({ onBack }) {
 
   // One auth path for both the form and the quick-login buttons.
   const attempt = async (em, pw) => {
+    setErr("");
     if (!DEMO) {
-      // Live mode: real Supabase Auth, then hydrate + subscribe.
-      const { error } = await authSignIn(em.trim(), pw);
-      if (error) return setErr(error.message);
-      // The password can be correct while the account still can't load -- if
-      // the profile row is missing or unreadable, initLive() returns null and
-      // nothing sets a session, so the user silently lands back on this
-      // screen. That is indistinguishable from a wrong password unless we say
-      // so. Sign the half-open session back out and name the real problem.
-      const profile = await initLive();
-      if (!profile) {
+      // Browser account-switching must wait for the previous logout to finish.
+      await waitForPendingSignout();
+      try {
+        const { error } = await authSignIn(em.trim(), pw);
+        if (error) return setErr(error.message);
+        const profile = await initLive();
+        if (!profile) {
+          await authSignOut().catch(() => {});
+          return setErr("Your password is correct, but this account isn't set up for a team yet. Ask your admin to add you through Personnel.");
+        }
+      } catch (e) {
         await authSignOut().catch(() => {});
-        return setErr("Your password is correct, but this account isn't set up for a team yet. Ask your admin to add you (Personnel → Add person) — no need to change your password.");
+        setErr("We couldn't load your company records. Your work has not been deleted. Please try again or ask your administrator to check the Doorline database.");
+        console.error("[doorline] sign-in data load failed:", e);
       }
       return;
     }
