@@ -669,6 +669,9 @@ export function loadSnapshot(snap, sessionId) {
 // state repaints live — no manual reload needed.
 export function applyRemote(table, payload) {
   const row = payload.new, old = payload.old, ev = payload.eventType;
+  // A delayed Realtime echo is not newer than an unsent local mutation.
+  // Preserve the agent's edit until its queued write succeeds.
+  if (sync.isMutationPending(table, row?.id || old?.id)) return;
   const upsert = (list, item, unshift) => {
     const i = list.findIndex((x) => x.id === item.id);
     if (i >= 0) list[i] = { ...list[i], ...item }; else unshift ? list.unshift(item) : list.push(item);
