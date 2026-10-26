@@ -29,7 +29,7 @@ begin
   end if;
   v_token := encode(gen_random_bytes(32), 'hex');
   insert into public.company_invites(org_id, token_hash, created_by, expires_at, max_uses)
-    values (v_org, encode(digest(v_token, 'sha256'), 'hex'), auth.uid(),
+    values (v_org, encode(sha256(decode(v_token, 'hex')), 'hex'), auth.uid(),
             now() + make_interval(days => p_expires_days), p_max_uses);
   return v_token;
 end $$;
@@ -43,7 +43,7 @@ begin
   if p_token is null or length(p_token) <> 64 or p_token !~ '^[0-9a-f]+$' then return null; end if;
   select o.name into v_name
     from public.company_invites i join public.organizations o on o.id = i.org_id
-    where i.token_hash = encode(digest(p_token, 'sha256'), 'hex')
+    where i.token_hash = encode(sha256(decode(p_token, 'hex')), 'hex')
       and i.expires_at > now() and i.used_count < i.max_uses;
   return v_name;
 end $$;
@@ -71,7 +71,7 @@ begin
   v_token := nullif(new.raw_user_meta_data->>'doorline_invite', '');
   if v_token is null then raise exception 'A company enrollment link is required.'; end if;
   select id, org_id into v_invite, v_org from public.company_invites
-    where token_hash = encode(digest(v_token, 'sha256'), 'hex')
+    where token_hash = encode(sha256(decode(v_token, 'hex')), 'hex')
       and expires_at > now() and used_count < max_uses
     for update;
   if v_invite is null then raise exception 'Company enrollment link expired or invalid.'; end if;
