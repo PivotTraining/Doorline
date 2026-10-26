@@ -11,7 +11,7 @@ const org = () => getCtx().orgId;
 
 // Initial hydrate: one round of reads → a store-shaped snapshot.
 export async function loadAll() {
-  const [o, profiles, homes, deals, posts, territories, street] = await Promise.all([
+  const [o, profiles, homes, deals, posts, territories, street, presence, closeouts] = await Promise.all([
     supabase.from("organizations").select("*").limit(1).single(),
     supabase.from("profiles").select("*"),
     supabase.from("homes").select("*"),
@@ -19,6 +19,8 @@ export async function loadAll() {
     supabase.from("posts").select("*, profiles(full_name)"),
     supabase.from("territories").select("*"),
     supabase.from("street_rows").select("*").order("slot", { nullsFirst: false }).order("created_at"),
+    supabase.from("agent_presence").select("*"),
+    supabase.from("daily_submissions").select("*"),
   ]);
   return {
     org: o.data
@@ -31,6 +33,13 @@ export async function loadAll() {
     posts: (posts.data || []).map((r) => M.postFromRow({ ...r, author_name: r.profiles?.full_name })),
     territories: (territories.data || []).map(M.territoryFromRow),
     streetRows: (street.data || []).map(M.streetRowFromRow),
+    presence: Object.fromEntries((presence.data || []).map((p) => [p.rep_id, {
+      online: p.online, since: p.started_at ? Date.parse(p.started_at) : null,
+      lastSeen: Date.parse(p.last_seen), lat: p.lat, lng: p.lng, consent: "granted",
+    }])),
+    submittedDays: Object.fromEntries((closeouts.data || []).map((r) => [r.id, {
+      submittedAt: Date.parse(r.submitted_at), notes: r.notes || "",
+    }])),
   };
 }
 
@@ -58,6 +67,21 @@ export const upsertStreetRow = async (r) => {
   return res;
 };
 export const deleteStreetRow = (id)     => supabase.from("street_rows").delete().eq("id", id);
+export const upsertDailySubmission = (r) => supabase.from("daily_submissions").upsert({
+  id: r.id, org_id: org(), rep_id: r.repId, day: r.day,
+  notes: r.notes || "", submitted_at: new Date(r.submittedAt).toISOString(),
+}, { onConflict: "id" });
+export const deleteDailySubmission = (id) => supabase.from("daily_submissions").delete().eq("id", id);
+// Presence is deliberately ephemeral; offline/closed browsers expire after 90s.
+// Do not feed heartbeats through the durable queue, where delayed "online" writes
+// could reappear AFTER a rep signed out.
+export const upsertAgentPresence = (p) => supabase.from("agent_presence").upsert({
+  rep_id: p.repId, org_id: org(), online: !!p.online,
+  lat: p.online ? (p.lat ?? null) : null,
+  lng: p.online ? (p.lng ?? null) : null,
+  started_at: p.since ? new Date(p.since).toISOString() : null,
+  last_seen: new Date().toISOString(),
+}, { onConflict: "rep_id" });
 export const upsertReportBatch = (b)    => supabase.from("report_batches").upsert(M.reportBatchToRow(b, org()));
 export const deleteReportBatch = (id)   => supabase.from("report_batches").delete().eq("id", id);
 export const upsertReportRow   = (r)    => supabase.from("report_rows").upsert(M.reportRowToRow(r, org()));
