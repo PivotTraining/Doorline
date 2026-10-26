@@ -11,6 +11,7 @@ import * as sync from "./api/sync";
 import * as M from "./api/mappers";
 import { localDay, localDayInTZ, guessTimezone } from "./lib/date.js";
 import { repZones, pointInPolygon, US_CENTER } from "./lib/geo.js";
+import { agentLive } from "./lib/presence.js";
 import { normalizeCampaigns, repCode } from "./lib/campaigns.js";
 
 export { localDay, localDayInTZ, US_CENTER };
@@ -393,11 +394,7 @@ export function setConsent(repId, consent) {
   const p = (state.presence[repId] = state.presence[repId] || {});
   p.consent = consent; emit(); sync.consent(consent === "granted");
 }
-const AGENT_STALE_MS = 90_000;
-export function isAgentLive(p, now = Date.now()) {
-  return !!p?.online && Number.isFinite(p.lat) && Number.isFinite(p.lng)
-    && (DEMO || (Number.isFinite(p.lastSeen) && now - p.lastSeen >= 0 && now - p.lastSeen < AGENT_STALE_MS));
-}
+export function isAgentLive(p, now = Date.now()) { return agentLive(p, now, DEMO); }
 export function startSession(repId) {
   const p = (state.presence[repId] = state.presence[repId] || {});
   p.online = true; p.since = Date.now(); p.lastSeen = Date.now(); emit();
