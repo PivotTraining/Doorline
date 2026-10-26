@@ -17,7 +17,7 @@ alter table public.company_invites enable row level security;
 revoke all on public.company_invites from anon, authenticated;
 
 create or replace function public.create_company_invite(p_max_uses integer default 25, p_expires_days integer default 14)
-returns text language plpgsql security definer set search_path = public, extensions, pg_temp as $
+returns text language plpgsql security definer set search_path = public, extensions, pg_temp as $$
 declare v_org uuid; v_token text;
 begin
   v_org := public.current_org_id();
