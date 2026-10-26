@@ -35,7 +35,7 @@ export async function loadAll() {
     streetRows: (street.data || []).map(M.streetRowFromRow),
     presence: Object.fromEntries((presence.data || []).map((p) => [p.rep_id, {
       online: p.online, since: p.started_at ? Date.parse(p.started_at) : null,
-      lastSeen: Date.parse(p.last_seen), lat: p.lat, lng: p.lng, consent: "granted",
+      lastSeen: Date.parse(p.last_seen), lat: p.lat, lng: p.lng, consent: undefined,
     }])),
     submittedDays: Object.fromEntries((closeouts.data || []).map((r) => [r.id, {
       submittedAt: Date.parse(r.submitted_at), notes: r.notes || "",
