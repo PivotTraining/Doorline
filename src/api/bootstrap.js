@@ -7,7 +7,8 @@ import * as auth from "./auth";
 import * as S from "./services";
 import { subscribeOrg } from "./realtime";
 import { setCtx } from "./context";
-import { startLocationFlush, startWriteFlush } from "./sync";
+import { startLocationFlush, startWriteFlush, pendingChanges } from "./sync";
+import { overlayPending } from "../lib/pendingOverlay.js";
 import { loadSnapshot, applyRemote } from "../store";
 
 let unsub = null;
@@ -31,9 +32,9 @@ async function resync() {
   lastResync = now;
   try {
     const snap = await S.loadAll();
-    loadSnapshot(snap, activeProfile.id);
+    loadSnapshot(overlayPending(snap, pendingChanges()), activeProfile.id);
     const reports = await S.loadReports();
-    if (reports) loadSnapshot(reports, activeProfile.id);
+    if (reports) loadSnapshot(overlayPending(reports, pendingChanges()), activeProfile.id);
   } catch {
     // A failed resync is non-fatal — the live socket and write queue carry on.
   } finally {
@@ -58,11 +59,11 @@ export async function initLive() {
   activeProfile = profile;
   setCtx({ orgId: profile.org_id, repId: profile.id });
   const snap = await S.loadAll();
-  loadSnapshot(snap, profile.id);
+  loadSnapshot(overlayPending(snap, pendingChanges()), profile.id);
   // Reports load separately + best-effort: a missing report table must not
   // stop the app from booting.
   const reports = await S.loadReports();
-  if (reports) loadSnapshot(reports, profile.id);
+  if (reports) loadSnapshot(overlayPending(reports, pendingChanges()), profile.id);
   lastResync = Date.now();                    // fresh snapshot — don't immediately re-pull
   if (unsub) unsub();
   unsub = subscribeOrg(profile.org_id, applyRemote);
