@@ -36,3 +36,24 @@ test("persisted offline street edits cannot load from another company's queue", 
     else globalThis.localStorage = original;
   }
 });
+
+test("an account switch parks pending writes instead of sending them as another user", async () => {
+  let stillOwner = true;
+  const delivered = [];
+  const q = createWriteQueue({
+    handlers: { street_rows: {
+      upsert: async (r) => { delivered.push(r); return { error: null }; },
+      del: async () => ({ error: null }),
+    } },
+    persist: false,
+    canFlush: () => stillOwner,
+  });
+  q.enqueue("street_rows", "upsert", { id: "row-a", repId: "agent-a" });
+  stillOwner = false;
+  assert.equal((await q.flush()).flushed, 0);
+  assert.equal(q.size(), 1);
+  assert.equal(delivered.length, 0);
+  stillOwner = true;
+  assert.equal((await q.flush()).flushed, 1);
+  assert.equal(delivered.length, 1);
+});
