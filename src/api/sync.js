@@ -14,6 +14,8 @@ import { DEMO, supabase } from "../supabaseClient";
 import * as S from "./services";
 import { createLocationQueue } from "./locationQueue";
 import { createWriteQueue } from "./writeQueue";
+import { getCtx } from "./context.js";
+import { tenantStorageKey } from "../lib/tenantScope.js";
 
 const live = () => !DEMO && !!supabase;
 
@@ -41,28 +43,45 @@ export async function bulkInsert(table, rows) {
   }
 }
 let writeQueue = null;
-function wq() { if (!writeQueue) writeQueue = createWriteQueue({ handlers: HANDLERS }); return writeQueue; }
+let writeScope = null;
+const currentWriteScope = () => tenantStorageKey("writes", getCtx());
+function wq() {
+  const scope = currentWriteScope();
+  if (!scope) return null;
+  if (scope !== writeScope) {
+    writeScope = scope;
+    writeQueue = createWriteQueue({ handlers: HANDLERS, storageKey: scope });
+  }
+  return writeQueue;
+}
 
 export function up(table, e) {
   if (!live() || !e || !HANDLERS[table]) return;
-  wq().enqueue(table, "upsert", e);
-  wq().flush();
+  const queue = wq();
+  if (!queue) { console.error("[doorline] skipped write without verified company/agent context"); return; }
+  queue.enqueue(table, "upsert", e);
+  queue.flush();
 }
 export function del(table, id) {
   if (!live() || !HANDLERS[table]) return;
-  wq().enqueue(table, "delete", id);
-  wq().flush();
+  const queue = wq();
+  if (!queue) { console.error("[doorline] skipped delete without verified company/agent context"); return; }
+  queue.enqueue(table, "delete", id);
+  queue.flush();
 }
 // Pending (not-yet-synced) write count, for a visible sync-status indicator.
-export function pendingWrites() { return wq().size(); }
-export function subscribeWrites(fn) { return wq().subscribe(fn); }
+export function pendingWrites() { return wq()?.size() ?? 0; }
+export function subscribeWrites(fn) { return wq()?.subscribe(fn) ?? (() => {}); }
 export function startWriteFlush(intervalMs = 10000) {
   if (!live()) return () => {};
-  wq().flush();
-  const id = setInterval(() => wq().flush(), intervalMs);
-  const onOnline = () => wq().flush();
-  window.addEventListener("online", onOnline);
-  return () => { clearInterval(id); window.removeEventListener("online", onOnline); };
+  const scope = currentWriteScope();
+  const assignedQueue = wq();
+  if (!scope || !assignedQueue) return () => {};
+  const flushOwn = () => { if (currentWriteScope() === scope) assignedQueue.flush(); };
+  flushOwn();
+  const id = setInterval(flushOwn, intervalMs);
+  window.addEventListener("online", flushOwn);
+  return () => { clearInterval(id); window.removeEventListener("online", flushOwn); };
 }
 // Not fire-and-forget: the caller needs the result (temp password / error).
 export async function createTeamMember(payload) {
@@ -92,22 +111,44 @@ export const assignTerritory = (tid, repId) => { if (live()) safe(S.assignTerrit
 
 // ---- GPS firehose (client) ----
 let queue = null;
-async function sendBatch(points) {
-  const url = import.meta.env.VITE_SUPABASE_URL;
+let gpsScope = null;
+async function sendBatch(points, expectedScope, expectedAgent) {
+  if (tenantStorageKey("locations", getCtx()) !== expectedScope) throw new Error("gps_scope_changed");
   const { data } = await supabase.auth.getSession();
+  if (!data?.session?.access_token || data.session.user?.id !== expectedAgent
+      || tenantStorageKey("locations", getCtx()) !== expectedScope) {
+    throw new Error("gps_user_changed");
+  }
+  const url = import.meta.env.VITE_SUPABASE_URL;
   const res = await fetch(`${url}/functions/v1/ingest-locations`, {
     method: "POST",
-    headers: { "content-type": "application/json", Authorization: `Bearer ${data?.session?.access_token}` },
+    headers: { "content-type": "application/json", Authorization: `Bearer ${data.session.access_token}` },
     body: JSON.stringify({ points }),
   });
   if (!res.ok) throw new Error("ingest_failed");
   return res.json();
 }
-function q() { if (!queue) queue = createLocationQueue({ send: sendBatch }); return queue; }
-
-export function location(pt) { if (live()) q().enqueue(pt); }
+function q() {
+  const ctx = getCtx();
+  const scope = tenantStorageKey("locations", ctx);
+  if (!scope) return null;
+  if (gpsScope !== scope) {
+    gpsScope = scope;
+    const agentId = ctx.repId;
+    queue = createLocationQueue({ send: (points) => sendBatch(points, scope, agentId) });
+  }
+  return queue;
+}
+export function location(pt) { if (live()) q()?.enqueue(pt); }
 export function startLocationFlush(intervalMs = 15000) {
   if (!live()) return () => {};
-  const id = setInterval(() => q().flush(), intervalMs);
+  const scope = tenantStorageKey("locations", getCtx());
+  const assignedQueue = q();
+  if (!scope || !assignedQueue) return () => {};
+  const flushOwn = () => {
+    if (tenantStorageKey("locations", getCtx()) === scope) assignedQueue.flush();
+  };
+  flushOwn();
+  const id = setInterval(flushOwn, intervalMs);
   return () => clearInterval(id);
 }
