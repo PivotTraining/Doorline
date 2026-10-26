@@ -22,6 +22,13 @@ export async function loadAll() {
     supabase.from("agent_presence").select("*"),
     supabase.from("daily_submissions").select("*"),
   ]);
+  // A missing migration, inaccessible table, or RLS error is NOT an empty
+  // company's activity. Never replace a rep's pending local work with a
+  // fabricated empty server snapshot when these reads fail.
+  const checked = { organizations: o, profiles, homes, deals, posts, territories,
+    street_rows: street, agent_presence: presence, daily_submissions: closeouts };
+  const failed = Object.entries(checked).find(([, response]) => response.error);
+  if (failed) throw new Error(`Doorline company data unavailable: ${failed[0]}`);
   return {
     org: o.data
       ? { name: o.data.name, logo: o.data.logo_path, homeZip: o.data.home_zip || null, homeLat: o.data.home_lat ?? null, homeLng: o.data.home_lng ?? null,
