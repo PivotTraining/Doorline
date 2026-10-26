@@ -27,7 +27,7 @@ function save(q, key = KEY) {
 }
 
 // handlers: { [table]: { upsert(payload), del(id) } }
-export function createWriteQueue({ handlers, persist = true, storageKey = KEY }) {
+export function createWriteQueue({ handlers, persist = true, storageKey = KEY, canFlush = () => true }) {
   let q = persist ? load(storageKey) : [];
   let flushing = false;
   const listeners = new Set();
@@ -55,7 +55,7 @@ export function createWriteQueue({ handlers, persist = true, storageKey = KEY })
   }
 
   async function flush() {
-    if (flushing || q.length === 0) {
+    if (flushing || q.length === 0 || !canFlush()) {
       return { flushed: 0, remaining: q.length };
     }
 
@@ -77,6 +77,10 @@ export function createWriteQueue({ handlers, persist = true, storageKey = KEY })
     };
 
     for (const item of batch) {
+      // When another user or organization takes over the browser, leave every
+      // outstanding entry parked for its original owner; never replay it as
+      // the newly signed-in account.
+      if (!canFlush()) break;
       const handler = handlers[item.table];
 
       if (!handler) {
