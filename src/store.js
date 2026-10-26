@@ -425,6 +425,7 @@ export function heartbeatSession(repId) {
 }
 export function endSession(repId) {
   const p = (state.presence[repId] = state.presence[repId] || {});
+  if (!p.online && p.lat == null && p.lng == null) return Promise.resolve();
   p.online = false; p.lat = null; p.lng = null; p.lastSeen = Date.now(); emit();
   return sync.presence({ repId, ...p });
 }
