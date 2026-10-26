@@ -171,3 +171,18 @@ create policy homes_write on public.homes for all to authenticated
       where p.id = rep_id and p.org_id = public.current_org_id()
     ))
   );
+
+
+-- A rep working from two devices can race to create the same street-sheet
+-- slot. Preserve both sets of notes, but let the UI reposition overflow rows.
+with ranked as (
+  select id, row_number() over (
+    partition by rep_id, day, slot order by created_at asc, id asc
+  ) as position
+  from public.street_rows where slot is not null
+)
+update public.street_rows s set slot = null
+from ranked r where s.id = r.id and r.position > 1;
+
+create unique index if not exists street_rows_one_slot_per_agent_day
+  on public.street_rows (rep_id, day, slot) where slot is not null;
