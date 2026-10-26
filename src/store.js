@@ -320,6 +320,8 @@ export function login(email, pass) {
   state.sessionId = u.id; emit();
   return { user: u };
 }
+let pendingSignout = Promise.resolve();
+export function waitForPendingSignout() { return pendingSignout; }
 export function logout() {
   const user = currentUser();
   const finalPresence = user?.role === "rep" ? endSession(user.id) : Promise.resolve();
@@ -327,11 +329,18 @@ export function logout() {
   else state = hydrate(blankLive());
   emit();
   if (!DEMO) {
-    Promise.resolve(finalPresence).catch(() => {}).finally(() => {
-      supabase.auth.signOut().catch(() => {});
-      import("./api/bootstrap").then(({ teardownLive }) => teardownLive());
+    // A new sign-in must never race the former account's asynchronous logout.
+    pendingSignout = Promise.resolve(finalPresence).catch(() => {}).then(async () => {
+      try { await supabase.auth.signOut(); }
+      finally {
+        const { teardownLive } = await import("./api/bootstrap");
+        teardownLive();
+      }
+    }).catch((err) => {
+      console.error("[doorline] sign-out failed:", err);
     });
   }
+  return pendingSignout;
 }
 
 // ---------- personnel ----------
