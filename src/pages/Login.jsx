@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useStore, getState, login } from "../store";
 import { DEMO } from "../supabaseClient";
-import { signIn as authSignIn, signUp as authSignUp, signOut as authSignOut } from "../api/auth";
+import { signIn as authSignIn, signUp as authSignUp, signOut as authSignOut, invitedCompanyName } from "../api/auth";
 import { initLive } from "../api/bootstrap";
 import { useTheme, toggleTheme } from "../theme.js";
 import Logo from "../components/Logo.jsx";
@@ -15,13 +15,24 @@ export default function Login({ onBack }) {
   useStore();
   useTheme();
   const org = getState().org;
-  const [mode, setMode] = useState("signin"); // signin | signup (live mode only)
+  const inviteToken = new URLSearchParams(window.location.search).get("invite") || "";
+  const [mode, setMode] = useState(inviteToken && !DEMO ? "signup" : "signin"); // signin | signup
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
   const [fullName, setFullName] = useState("");
   const [orgName, setOrgName] = useState("");
   const [err, setErr] = useState("");
   const [notice, setNotice] = useState("");
+  const [inviteName, setInviteName] = useState(null);
+  const [inviteChecked, setInviteChecked] = useState(!inviteToken);
+  useEffect(() => {
+    if (DEMO || !inviteToken) return;
+    let live = true;
+    invitedCompanyName(inviteToken)
+      .then((name) => { if (live) { setInviteName(name); setInviteChecked(true); if (!name) setErr("This company enrollment link is invalid, expired, or used up. Ask your company for a new link."); } })
+      .catch(() => { if (live) { setInviteChecked(true); setErr("Could not validate your company link. Check your connection and try again."); } });
+    return () => { live = false; };
+  }, [inviteToken]);
 
   // One auth path for both the form and the quick-login buttons.
   const attempt = async (em, pw) => {
@@ -50,13 +61,14 @@ export default function Login({ onBack }) {
   const submitSignup = async (e) => {
     e?.preventDefault?.();
     setErr(""); setNotice("");
+    if (inviteToken && (!inviteChecked || !inviteName)) return setErr("A valid company link is required before enrolling.");
     if (!fullName.trim() || !email.trim() || pass.length < 6) {
       return setErr("Fill in your name, email, and a password of at least 6 characters.");
     }
     // orgName is only used to name the company on a brand-new install; an
     // ordinary signup joins the existing team (see migration 0018), so it is
     // no longer asked for here.
-    const { data, error } = await authSignUp(email.trim(), pass, fullName.trim(), orgName.trim());
+    const { data, error } = await authSignUp(email.trim(), pass, fullName.trim(), orgName.trim(), inviteToken);
     if (error) return setErr(error.message);
     if (data?.session) { await initLive(); return; } // email confirmation off — signed in immediately
     setNotice("Check your email to confirm your account, then sign in below.");
@@ -71,6 +83,9 @@ export default function Login({ onBack }) {
         <div style={{ marginBottom: 14 }}>{org.logo ? <div className="logo-lg" style={{ marginBottom: 0 }}><img src={org.logo} alt="" /></div> : <Logo size={46} />}</div>
         <h1 style={{ fontSize: 24 }}>{org.name || "Doorline"}</h1>
         <p className="muted" style={{ marginTop: 0 }}>Door-to-door sales — field & admin in one.</p>
+        {!DEMO && inviteToken && <p className="pill" style={{ marginBottom: 12 }}>
+          {inviteName ? `Invited to join: ${inviteName}` : inviteChecked ? "Enrollment link unavailable" : "Validating company invitation…"}
+        </p>}
 
         {err && <div className="err">{err}</div>}
         {notice && <div className="err" style={{ borderColor: "var(--green)", color: "var(--green)" }}>{notice}</div>}
@@ -78,7 +93,7 @@ export default function Login({ onBack }) {
         {!DEMO && mode === "signup" ? (
           <form onSubmit={submitSignup}>
             <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
-              Creating an account adds you to the team as a field rep. Your manager can change your role afterwards.
+              {inviteToken ? "Your company invitation automatically assigns your account to the correct team as a field rep." : "New company setup requires an empty Doorline installation. To join an existing team, request a company enrollment link."}
             </p>
             <label className="field">
               <span>Your name</span>
@@ -94,7 +109,7 @@ export default function Login({ onBack }) {
               <input className="input" type="password" value={pass} autoComplete="new-password"
                 onChange={(e) => setPass(e.target.value)} placeholder="At least 6 characters" />
             </label>
-            <button className="btn primary" type="submit" style={{ width: "100%" }}>Create my account</button>
+            <button className="btn primary" type="submit" disabled={!!inviteToken && (!inviteChecked || !inviteName)} style={{ width: "100%" }}>Create my account</button>
           </form>
         ) : (
           <form onSubmit={submit}>
