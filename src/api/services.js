@@ -58,11 +58,19 @@ export const deleteTerritory = (id)     => supabase.from("territories").delete()
 // once without that one field so the door itself still saves -- losing the
 // deal link is recoverable, losing the entry is not.
 export const upsertStreetRow = async (r) => {
-  const row = M.streetRowToRow(r, org());
-  const res = await supabase.from("street_rows").upsert(row);
+  let row = M.streetRowToRow(r, org());
+  let res = await supabase.from("street_rows").upsert(row);
   if (res?.error && "deal_id" in row && /deal_id/.test(res.error.message || "")) {
     const { deal_id, ...withoutLink } = row;
-    return supabase.from("street_rows").upsert(withoutLink);
+    row = withoutLink;
+    res = await supabase.from("street_rows").upsert(row);
+  }
+  // Concurrent edits from two devices can claim the same slot. Preserve the
+  // later row's actual data in an unassigned slot rather than lose a day of
+  // fieldwork to a permanent unique-constraint failure.
+  if (res?.error?.code === "23505"
+      && /street_rows_one_slot_per_agent_day/.test(res.error.message || "")) {
+    res = await supabase.from("street_rows").upsert({ ...row, slot: null });
   }
   return res;
 };
