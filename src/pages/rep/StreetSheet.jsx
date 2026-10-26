@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef, memo } from "react";
 import { useStore, getState, SHEET_COLS, addStreetRow, updateStreetRow, removeStreetRow, sheetTotals, submitDay, reopenDay, isDaySubmitted, activeProducts, updateDeal } from "../../store";
 import { localDay } from "../../lib/date.js";
+import { isMutationPending, subscribeWrites } from "../../api/sync.js";
 
 const SLOTS = 100;
 const today = () => localDay();
@@ -126,6 +127,12 @@ export default function StreetSheet({ user }) {
   const rows = state.streetRows.filter((r) => r.repId === user.id && r.date === date);
   const t = sheetTotals(rows);
   const submitted = isDaySubmitted(user.id, date);
+  const [pendingCloseout, setPendingCloseout] = useState(false);
+  useEffect(() => {
+    const update = () => setPendingCloseout(isMutationPending("daily_submissions", `${user.id}|${date}`));
+    update();
+    return subscribeWrites(update);
+  }, [user.id, date]);
   const submittedNotes = state.submittedDays[`${user.id}|${date}`]?.notes || "";
   useEffect(() => {
     if (submitted) setCloseoutNotes(submittedNotes);
@@ -165,7 +172,7 @@ export default function StreetSheet({ user }) {
             <input className="input" type="date" value={date} onChange={(e) => { autoToday.current = false; setDate(e.target.value); setCloseoutNotes(state.submittedDays[`${user.id}|${e.target.value}`]?.notes || ""); }} style={{ width: "auto" }} />
           </label>
           {submitted
-            ? <><span className="pill"><span className="dot" style={{ background: "var(--green)" }} /> Submitted</span><button className="btn" onClick={() => reopenDay(user.id, date)}>Reopen</button></>
+            ? <><span className="pill"><span className="dot" style={{ background: pendingCloseout ? "var(--amber)" : "var(--green)" }} /> {pendingCloseout ? "Closeout queued for sync" : "Submitted to company"}</span><button className="btn" onClick={() => reopenDay(user.id, date)}>Reopen</button></>
             : <button className="btn primary" onClick={complete}>✓ Submit daily closeout</button>}
         </div>
       </div>
@@ -221,7 +228,7 @@ export default function StreetSheet({ user }) {
             value={closeoutNotes} onChange={(e) => setCloseoutNotes(e.target.value)}
             placeholder="Unfinished streets, promising leads, callbacks or anything your manager should know…" />
         </label>
-        {submitted && <p className="muted" style={{ fontSize: 13 }}>Submitted. Reopen the day to make corrections and submit again.</p>}
+        {submitted && <p className="muted" style={{ fontSize: 13 }}>{pendingCloseout ? "Saved on this device. Your manager will receive this closeout once the queued changes finish syncing." : "Submitted to company. Reopen the day to make corrections and submit again."}</p>}
       </div>
       <div className="row between" style={{ marginTop: 10, flexWrap: "wrap", gap: 10 }}>
         <p className="muted" style={{ fontSize: 12, margin: 0 }}>
