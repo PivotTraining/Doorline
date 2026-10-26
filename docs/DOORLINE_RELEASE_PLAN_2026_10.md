@@ -85,3 +85,40 @@ against the production database. Do not merge/deploy live until the checklist be
 The web application cannot provide native background GPS when closed. Stale or denied
 locations are not invented. The currently available Supabase integration cannot verify
 the Doorline database, and passing front-end build tests is not an end-to-end backend test.
+
+## Offline, security and release notes (continuation)
+
+- In live mode, `doorline_state_v1` is no longer used as a shared cache of
+  company records. Demo mode still uses that key. Tenant- and agent-specific
+  pending mutations live in the v2 offline write queue.
+- The older `doorline_write_queue_v1` is deliberately not replayed into the
+  new scoped queue: its originating user/org cannot be established from the
+  shared key. For installations with outstanding offline work, reconcile
+  local entries against a signed-in owner's verified server records before
+  clearing browser data. Do not silently discard or migrate these records.
+- Switching agents pauses the old user's outstanding queue. A future session
+  for that same agent can resume its own queue, but a different company's
+  account cannot inherit it.
+- Reconnect snapshots overlay pending local Street Sheet changes, and stale
+  Realtime updates cannot overwrite still-queued edits.
+- Submitting a daily closeout locally now shows "queued for sync" until the
+  durable write has been accepted. Do not claim a company received it while
+  offline.
+- A prior migration's permissive RLS street and home writes are tightened;
+  new writes must point to records in the authenticated company. A unique
+  street-slot index deduplicates preexisting colliding entries by clearing
+  the later slot number *without deleting the underlying row*.
+- Sign-out is serialized with a subsequent browser account switch; tracking
+  stops on unmount and location credentials are not reused across tenants.
+
+### Release constraints discovered
+
+The Doorline Vercel project currently lists its Supabase URL and anon-key
+variables for **production** only. Review the preview environment before
+testing live Supabase integration. Do not copy the production configuration to
+preview without a deliberate staging plan and verified migration.
+
+CI runs JavaScript tests and a Vite build. SQL validity tests are structural
+checks only; they do not run the migration inside PostgreSQL and do not test
+Postgres RLS execution or tenant boundary isolation. Those remain manual
+release blockers.
