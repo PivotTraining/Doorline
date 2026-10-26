@@ -306,7 +306,17 @@ export function login(email, pass) {
   state.sessionId = u.id; emit();
   return { user: u };
 }
-export function logout() { state.sessionId = null; emit(); }
+export function logout() {
+  const user = currentUser();
+  const finalPresence = user?.role === "rep" ? endSession(user.id) : Promise.resolve();
+  state.sessionId = null; emit();
+  if (!DEMO) {
+    Promise.resolve(finalPresence).catch(() => {}).finally(() => {
+      supabase.auth.signOut().catch(() => {});
+      import("./api/bootstrap").then(({ teardownLive }) => teardownLive());
+    });
+  }
+}
 
 // ---------- personnel ----------
 export async function addUser({ name, email, role, plan, territory, pass, timezone, homeZip, homeLat, homeLng }) {
@@ -383,18 +393,37 @@ export function setConsent(repId, consent) {
   const p = (state.presence[repId] = state.presence[repId] || {});
   p.consent = consent; emit(); sync.consent(consent === "granted");
 }
+const AGENT_STALE_MS = 90_000;
+export function isAgentLive(p, now = Date.now()) {
+  return !!p?.online && Number.isFinite(p.lat) && Number.isFinite(p.lng)
+    && (DEMO || (Number.isFinite(p.lastSeen) && now - p.lastSeen >= 0 && now - p.lastSeen < AGENT_STALE_MS));
+}
 export function startSession(repId) {
   const p = (state.presence[repId] = state.presence[repId] || {});
-  p.online = true; p.since = Date.now(); emit();
+  p.online = true; p.since = Date.now(); p.lastSeen = Date.now(); emit();
+  return sync.presence({ repId, ...p }).catch(() => {});
+}
+export function heartbeatSession(repId) {
+  const p = state.presence[repId];
+  if (!p?.online) return;
+  p.lastSeen = Date.now();
+  return sync.presence({ repId, ...p }).catch(() => {});
 }
 export function endSession(repId) {
-  const p = state.presence[repId]; if (p) { p.online = false; emit(); }
+  const p = (state.presence[repId] = state.presence[repId] || {});
+  p.online = false; p.lat = null; p.lng = null; p.lastSeen = Date.now(); emit();
+  return sync.presence({ repId, ...p });
 }
 export function addBreadcrumb(repId, pt) {
+  const p = (state.presence[repId] = state.presence[repId] || {});
+  if (!p.online) return;
+  const point = { lat: +pt.lat.toFixed(6), lng: +pt.lng.toFixed(6), ts: Date.now() };
   const arr = (state.tracks[repId] = state.tracks[repId] || []);
-  arr.push({ lat: +pt.lat.toFixed(6), lng: +pt.lng.toFixed(6), ts: Date.now() });
+  arr.push(point);
   if (arr.length > 600) arr.splice(0, arr.length - 600);
+  p.lat = point.lat; p.lng = point.lng; p.lastSeen = Date.now();
   emit(); sync.location({ lat: pt.lat, lng: pt.lng });
+  sync.presence({ repId, ...p }).catch(() => {});
 }
 export function clearTrack(repId) { state.tracks[repId] = []; emit(); }
 
@@ -405,12 +434,12 @@ export function repAccountability(repId) {
   const t = state.tracks[repId] || [];
   const p = state.presence[repId] || {};
   let mins = 0;
-  if (p.online && p.since) mins = Math.round((Date.now() - p.since) / 60000);
+  if (isAgentLive(p) && p.since) mins = Math.round((Date.now() - p.since) / 60000);
   else if (t.length > 1) mins = Math.round((t[t.length - 1].ts - t[0].ts) / 60000);
   const u = state.users.find((x) => x.id === repId);
   const today = localDayInTZ(u?.timezone);
   const doors = state.streetRows.filter((r) => r.repId === repId && r.date === today && (r.nh || r.rl || r.dm || r.bid || r.d || r.ni || r.nq || r.street)).length;
-  return { mins, doors, points: t.length, online: !!p.online, consent: p.consent };
+  return { mins, doors, points: t.length, online: isAgentLive(p), consent: p.consent };
 }
 
 // Default map center for a rep (their own home ZIP, else the org's, else
@@ -429,8 +458,9 @@ export function mapDefaultCenter(repId) {
 export function repGeofenceStatus(repId) {
   const zones = repZones(state, repId);
   if (!zones.length) return null;
+  const p = state.presence[repId];
   const pts = state.tracks[repId] || [];
-  const last = pts[pts.length - 1];
+  const last = isAgentLive(p) ? { lat: p.lat, lng: p.lng, ts: p.lastSeen } : pts[pts.length - 1];
   if (!last) return null;
   const inside = zones.some((z) => pointInPolygon([last.lat, last.lng], z.boundary));
   return { inside, zoneName: zones[0].name, at: last.ts };
@@ -444,7 +474,7 @@ export function repGeofenceStatus(repId) {
 export function geofenceAlerts() {
   return state.users
     .filter((u) => u.role === "rep")
-    .map((u) => ({ rep: u, geo: repGeofenceStatus(u.id), online: !!state.presence[u.id]?.online }))
+    .map((u) => ({ rep: u, geo: repGeofenceStatus(u.id), online: isAgentLive(state.presence[u.id]) }))
     .filter((x) => x.online && x.geo && !x.geo.inside)
     .map((x) => ({ repId: x.rep.id, repName: x.rep.name, zoneName: x.geo.zoneName, at: x.geo.at }));
 }
@@ -510,8 +540,17 @@ export function deleteReportBatch(id) {
 
 // ---------- daily sheet lifecycle ----------
 const dayKey = (repId, date) => repId + "|" + date;
-export function submitDay(repId, date) { state.submittedDays[dayKey(repId, date)] = true; emit(); }
-export function reopenDay(repId, date) { delete state.submittedDays[dayKey(repId, date)]; emit(); }
+export function submitDay(repId, date, notes = "") {
+  const id = dayKey(repId, date);
+  const entry = { id, repId, day: date, notes: String(notes).slice(0, 5000), submittedAt: Date.now() };
+  state.submittedDays[id] = { notes: entry.notes, submittedAt: entry.submittedAt };
+  emit(); push("daily_submissions", entry);
+}
+export function reopenDay(repId, date) {
+  const id = dayKey(repId, date);
+  delete state.submittedDays[id];
+  emit(); pushDel("daily_submissions", id);
+}
 export function isDaySubmitted(repId, date) { return !!state.submittedDays[dayKey(repId, date)]; }
 
 // Combined stats for My Day: map doors + street-sheet work.
@@ -637,6 +676,25 @@ export function applyRemote(table, payload) {
   } else if (table === "report_rows") {
     if (ev === "DELETE") state.reportRows = state.reportRows.filter((r) => r.id !== old?.id);
     else if (row) upsert(state.reportRows, M.reportRowFromRow(row));
+  } else if (table === "agent_presence") {
+    const repId = row?.rep_id || old?.rep_id;
+    if (repId) {
+      if (ev === "DELETE") delete state.presence[repId];
+      else if (row) state.presence[repId] = {
+        ...state.presence[repId], online: !!row.online,
+        lat: row.lat, lng: row.lng,
+        since: row.started_at ? Date.parse(row.started_at) : null,
+        lastSeen: Date.parse(row.last_seen), consent: "granted",
+      };
+    }
+  } else if (table === "daily_submissions") {
+    const id = row?.id || old?.id;
+    if (id) {
+      if (ev === "DELETE") delete state.submittedDays[id];
+      else if (row) state.submittedDays[id] = {
+        notes: row.notes || "", submittedAt: Date.parse(row.submitted_at),
+      };
+    }
   }
   emit();
 }
