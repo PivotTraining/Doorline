@@ -82,4 +82,5 @@ export function teardownLive() {
   if (stopWriteFlush) { stopWriteFlush(); stopWriteFlush = null; }
   if (stopResync) { stopResync(); stopResync = null; }
   activeProfile = null;
+  setCtx({ orgId: null, repId: null });
 }
