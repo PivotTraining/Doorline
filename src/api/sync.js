@@ -50,7 +50,7 @@ function wq() {
   if (!scope) return null;
   if (scope !== writeScope) {
     writeScope = scope;
-    writeQueue = createWriteQueue({ handlers: HANDLERS, storageKey: scope });
+    writeQueue = createWriteQueue({ handlers: HANDLERS, storageKey: scope, canFlush: () => currentWriteScope() === scope });
   }
   return writeQueue;
 }
