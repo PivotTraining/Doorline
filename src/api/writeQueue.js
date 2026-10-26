@@ -10,25 +10,25 @@
 // ===========================================================
 const KEY = "doorline_write_queue_v1";
 
-function load() {
+function load(key = KEY) {
   try {
-    return JSON.parse(localStorage.getItem(KEY)) || [];
+    return JSON.parse(localStorage.getItem(key)) || [];
   } catch {
     return [];
   }
 }
 
-function save(q) {
+function save(q, key = KEY) {
   try {
-    localStorage.setItem(KEY, JSON.stringify(q));
+    localStorage.setItem(key, JSON.stringify(q));
   } catch {
     // Storage full/unavailable -- queue stays in memory for this session.
   }
 }
 
 // handlers: { [table]: { upsert(payload), del(id) } }
-export function createWriteQueue({ handlers, persist = true }) {
-  let q = persist ? load() : [];
+export function createWriteQueue({ handlers, persist = true, storageKey = KEY }) {
+  let q = persist ? load(storageKey) : [];
   let flushing = false;
   const listeners = new Set();
 
@@ -50,7 +50,7 @@ export function createWriteQueue({ handlers, persist = true }) {
       queuedAt: Date.now(),
     });
 
-    if (persist) save(q);
+    if (persist) save(q, storageKey);
     notify();
   }
 
@@ -119,7 +119,7 @@ export function createWriteQueue({ handlers, persist = true }) {
 
     const hasNewWrites = q.some((item) => !batch.includes(item));
 
-    if (persist) save(q);
+    if (persist) save(q, storageKey);
 
     flushing = false;
     notify();
