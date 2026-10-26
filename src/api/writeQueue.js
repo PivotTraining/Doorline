@@ -146,6 +146,7 @@ export function createWriteQueue({ handlers, persist = true, storageKey = KEY, c
     enqueue,
     flush,
     size: () => q.length,
+    pending: () => q.map((item) => ({ ...item })),
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
