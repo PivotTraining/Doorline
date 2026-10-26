@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, Polygon, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
-import { useStore, getState, DISPOS, addHome, setDoor, mapDefaultCenter } from "../store";
+import { useStore, getState, DISPOS, addHome, setDoor, mapDefaultCenter, isAgentLive } from "../store";
 import DoorEditor from "./DoorEditor.jsx";
 import { repZones, pointInPolygon, US_CENTER } from "../lib/geo.js";
 
@@ -77,7 +77,7 @@ function ClickToDrop({ onDrop }) {
 /**
  * FieldMap
  *  - repId    : when set, doors are filtered to this rep and the map is editable.
- *  - admin    : read-only org-wide view with simulated live rep dots.
+ *  - admin    : read-only org-wide view with consented, fresh GPS markers.
  */
 export default function FieldMap({ repId = null, admin = false, height = 540 }) {
   useStore();
@@ -105,32 +105,13 @@ export default function FieldMap({ repId = null, admin = false, height = 540 }) 
   const zones = (admin ? state.territories : state.territories.filter((t) => t.assignedTo === repId))
     .filter((t) => t.boundary && t.boundary.length >= 3);
 
-  // ---- simulated live rep dots (admin only) ----
-  const [repPos, setRepPos] = useState({});
+  // Recompute staleness even when the server stops emitting (abandoned tab).
+  // A position counts as live for at most 90s without a new heartbeat.
+  const [presenceNow, setPresenceNow] = useState(Date.now());
   useEffect(() => {
     if (!admin) return;
-    // seed each rep near the centroid of their doors
-    const seedPos = {};
-    reps.forEach((r) => {
-      const hs = state.homes.filter((h) => h.repId === r.id);
-      if (hs.length) {
-        const lat = hs.reduce((a, h) => a + h.lat, 0) / hs.length;
-        const lng = hs.reduce((a, h) => a + h.lng, 0) / hs.length;
-        seedPos[r.id] = [lat, lng];
-      }
-    });
-    setRepPos(seedPos);
-    const t = setInterval(() => {
-      setRepPos((prev) => {
-        const next = {};
-        for (const id in prev) {
-          next[id] = [prev[id][0] + (Math.random() - 0.5) * 0.0008, prev[id][1] + (Math.random() - 0.5) * 0.0008];
-        }
-        return next;
-      });
-    }, 2000);
-    return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const timer = setInterval(() => setPresenceNow(Date.now()), 15000);
+    return () => clearInterval(timer);
   }, [admin]);
 
   // ---- actions ----
@@ -229,13 +210,14 @@ export default function FieldMap({ repId = null, admin = false, height = 540 }) 
           })}
 
         {admin &&
-          reps.map((r, i) =>
-            repPos[r.id] ? (
-              <Marker key={r.id} position={repPos[r.id]} icon={repIcon(REP_COLORS[i % REP_COLORS.length])}>
-                <Popup><strong>{r.name}</strong><br /><small>Live · {r.territory}</small></Popup>
+          reps.map((r, i) => {
+            const presence = state.presence[r.id];
+            return isAgentLive(presence, presenceNow) ? (
+              <Marker key={r.id} position={[presence.lat, presence.lng]} icon={repIcon(REP_COLORS[i % REP_COLORS.length])}>
+                <Popup><strong>{r.name}</strong><br /><small>On shift · {r.territory}</small></Popup>
               </Marker>
-            ) : null
-          )}
+            ) : null;
+          })}
       </MapContainer>
 
       <div className="map-controls">
