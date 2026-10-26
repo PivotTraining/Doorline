@@ -636,9 +636,17 @@ function pushDel(table, id) { sync.del(table, id); }
 // ---------- live hydration + realtime (live mode only) ----------
 // Replace local slices with a server snapshot (api/bootstrap.initLive()).
 export function loadSnapshot(snap, sessionId) {
-  state = { ...state, ...snap, sessionId: sessionId ?? state.sessionId };
+  const self = sessionId ?? state.sessionId;
+  // GPS consent is a device-level, explicit user choice. A server resync may
+  // replace the company's live presence snapshot but must never silently
+  // treat that as consent or erase a choice made on this device.
+  const ownConsent = state.presence?.[self]?.consent;
+  const freshPresence = snap.presence
+    ? { ...snap.presence, ...(self && snap.presence[self]
+        ? { [self]: { ...snap.presence[self], consent: ownConsent } } : {}) }
+    : state.presence;
+  state = { ...state, ...snap, presence: freshPresence, sessionId: self };
   state.tracks = state.tracks || {};
-  state.presence = state.presence || {};
   emit();
 }
 // Merge a Realtime change into local state. Runs for every subscribed table
