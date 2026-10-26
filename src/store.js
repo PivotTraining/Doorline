@@ -681,7 +681,7 @@ export function applyRemote(table, payload) {
         ...state.presence[repId], online: !!row.online,
         lat: row.lat, lng: row.lng,
         since: row.started_at ? Date.parse(row.started_at) : null,
-        lastSeen: Date.parse(row.last_seen), consent: "granted",
+        lastSeen: Date.parse(row.last_seen), consent: state.presence[repId]?.consent,
       };
     }
   } else if (table === "daily_submissions") {
