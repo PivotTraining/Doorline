@@ -71,6 +71,11 @@ export function del(table, id) {
 }
 // Pending (not-yet-synced) write count, for a visible sync-status indicator.
 export function pendingWrites() { return wq()?.size() ?? 0; }
+export function pendingChanges() { return wq()?.pending() ?? []; }
+export function isMutationPending(table, id) {
+  if (!table || !id) return false;
+  return pendingChanges().some((p) => p.table === table && p.id === id);
+}
 export function subscribeWrites(fn) { return wq()?.subscribe(fn) ?? (() => {}); }
 export function startWriteFlush(intervalMs = 10000) {
   if (!live()) return () => {};
