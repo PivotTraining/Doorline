@@ -43,10 +43,22 @@ Deno.serve(async (req) => {
 
   let body: { points?: Array<{ lat: number; lng: number; ts?: string }> };
   try { body = await req.json(); } catch { return json({ error: "bad_json" }, 400); }
-  const points = (body.points ?? []).slice(0, MAX_BATCH).filter(
-    (p) => typeof p.lat === "number" && typeof p.lng === "number" &&
-           Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180
+  if (!Array.isArray(body?.points) || body.points.length > MAX_BATCH) {
+    return json({ error: "invalid_batch" }, 400);
+  }
+  const now = Date.now();
+  const points = body.points.filter(
+    (p) => p !== null && typeof p === "object" &&
+      typeof p.lat === "number" && typeof p.lng === "number" &&
+      Number.isFinite(p.lat) && Number.isFinite(p.lng) &&
+      Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180 &&
+      (p.ts === undefined ||
+        (typeof p.ts === "string" && Number.isFinite(Date.parse(p.ts)) &&
+          Date.parse(p.ts) >= now - 90 * 86400_000 &&
+          Date.parse(p.ts) <= now + 5 * 60_000))
   );
+  // Reject mixed invalid batches instead of silently losing unaccepted points.
+  if (points.length !== body.points.length) return json({ error: "invalid_point" }, 400);
   if (points.length === 0) return json({ accepted: 0 });
 
   const rows = points.map((p) => ({
