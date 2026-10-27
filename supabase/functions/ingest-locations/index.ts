@@ -29,8 +29,13 @@ Deno.serve(async (req) => {
 
   // Service client for the privileged consent check + insert.
   const svc = createClient(SUPABASE_URL, SERVICE_KEY);
-  const { data: profile } = await svc.from("profiles").select("org_id").eq("id", u.user.id).single();
+  const { data: profile } = await svc.from("profiles")
+    .select("org_id, role, status").eq("id", u.user.id).single();
   if (!profile) return json({ error: "no_profile" }, 403);
+  // JWTs do not immediately expire when an employee is deactivated.
+  if (profile.status !== "active" || profile.role !== "rep") {
+    return json({ error: "forbidden" }, 403);
+  }
 
   // Legal gate: refuse to record without active consent.
   const { data: consent } = await svc.from("consents").select("state").eq("rep_id", u.user.id).single();
