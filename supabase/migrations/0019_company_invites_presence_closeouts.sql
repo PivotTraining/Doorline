@@ -173,6 +173,11 @@ create policy homes_write on public.homes for all to authenticated
   );
 
 
+-- Earlier migrations did not add this column although the Street Sheet
+-- mapper uses it. Add it before backfilling/indexing, even on upgraded sites.
+alter table public.street_rows
+  add column if not exists slot integer;
+
 -- A rep working from two devices can race to create the same street-sheet
 -- slot. Preserve both sets of notes, but let the UI reposition overflow rows.
 with ranked as (
