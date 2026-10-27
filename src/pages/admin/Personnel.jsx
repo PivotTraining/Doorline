@@ -4,6 +4,8 @@ import { geocodeZip } from "../../lib/geocode.js";
 import { US_TIMEZONES, guessTimezone } from "../../lib/date.js";
 import { repCode } from "../../lib/campaigns.js";
 import Modal from "../../components/Modal.jsx";
+import { DEMO } from "../../supabaseClient.js";
+import { issueCompanyInvite } from "../../api/auth.js";
 
 const ROLES = ["owner", "admin", "manager", "rep", "viewer"];
 const PLANS = [3900, 5900, 8900];
@@ -17,6 +19,19 @@ export default function Personnel() {
   const [zipBusy, setZipBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState(null); // {email, tempPassword} after a live add
+  const [enrollmentUrl, setEnrollmentUrl] = useState("");
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteError, setInviteError] = useState("");
+  const generateLink = async () => {
+    setInviteError("");
+    if (DEMO) return setInviteError("Connect the Doorline production database to enable secure company enrollment links.");
+    setInviteBusy(true);
+    try {
+      const token = await issueCompanyInvite();
+      setEnrollmentUrl(`${window.location.origin}/app?invite=${encodeURIComponent(token)}`);
+    } catch (e) { setInviteError(e.message || "Could not create the enrollment link."); }
+    finally { setInviteBusy(false); }
+  };
 
   const open = (mode, data) => { setErr(""); setForm({ mode, data: data ? { timezone: "", homeZip: "", homeLat: null, homeLng: null, ...data } : blank() }); };
 
@@ -63,8 +78,25 @@ export default function Personnel() {
           <h1>Personnel</h1>
           <p>{state.users.length} people · {billed.length} billable seats · ${(monthly / 100).toFixed(0)}/mo</p>
         </div>
-        <button className="btn primary" onClick={() => open("add")}>+ Add person</button>
+        <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+          <button className="btn" onClick={generateLink} disabled={inviteBusy}>{inviteBusy ? "Creating link…" : "🔗 Company enrollment link"}</button>
+          <button className="btn primary" onClick={() => open("add")}>+ Add person</button>
+        </div>
       </div>
+
+      {(inviteError || enrollmentUrl) && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          {inviteError && <div className="err">{inviteError}</div>}
+          {enrollmentUrl && <>
+            <b>Agent enrollment link</b>
+            <p className="muted" style={{ fontSize: 13 }}>Valid for 14 days or 25 agent signups, whichever comes first. Anyone with this link can enroll as a rep in your company. Share privately.</p>
+            <div className="row" style={{ gap: 8 }}>
+              <input className="input" readOnly value={enrollmentUrl} onFocus={(e) => e.target.select()} />
+              <button className="btn primary" onClick={() => navigator.clipboard?.writeText(enrollmentUrl)}>Copy</button>
+            </div>
+          </>}
+        </div>
+      )}
 
       <div className="card">
         <div className="table-scroll">

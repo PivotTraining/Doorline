@@ -11,6 +11,7 @@ import * as sync from "./api/sync";
 import * as M from "./api/mappers";
 import { localDay, localDayInTZ, guessTimezone } from "./lib/date.js";
 import { repZones, pointInPolygon, US_CENTER } from "./lib/geo.js";
+import { agentLive } from "./lib/presence.js";
 import { normalizeCampaigns, repCode } from "./lib/campaigns.js";
 
 export { localDay, localDayInTZ, US_CENTER };
@@ -216,7 +217,17 @@ function hydrate(s) {
 
 // ---------- state + subscription ----------
 function load() { try { return JSON.parse(localStorage.getItem(KEY)); } catch { return null; } }
-let state = hydrate(load()) || seed();
+// Real accounts must never inherit another person's browser-wide demo cache.
+// Unsynced live edits survive through their authenticated, tenant-scoped write queue.
+function blankLive() {
+  return {
+    org: { name: "Doorline", logo: null, homeZip: null, homeLat: null, homeLng: null },
+    users: [], homes: [], deals: [], posts: [], territories: [], tracks: {},
+    presence: {}, streetRows: [], submittedDays: {},
+    reportBatches: [], reportRows: [], sessionId: null,
+  };
+}
+let state = hydrate(DEMO ? load() : blankLive()) || seed();
 let version = 0;
 const listeners = new Set();
 
@@ -229,6 +240,9 @@ const idle = typeof requestIdleCallback === "function"
   : (fn) => setTimeout(fn, 250);
 function persistNow() {
   persistScheduled = false;
+  // Never cache one company's people, locations or customer records in a
+  // device-wide key that another authenticated agent could later inherit.
+  if (!DEMO) return;
   try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* quota/serialization */ }
 }
 function schedulePersist() { if (!persistScheduled) { persistScheduled = true; idle(persistNow); } }
@@ -244,7 +258,7 @@ if (typeof window !== "undefined") {
   // Skipped if this tab has its own unsaved edits pending, so we never
   // clobber local work with a stale snapshot from another tab.
   window.addEventListener("storage", (e) => {
-    if (e.key !== KEY || e.newValue == null || persistScheduled) return;
+    if (!DEMO || e.key !== KEY || e.newValue == null || persistScheduled) return;
     try {
       const incoming = hydrate(JSON.parse(e.newValue));
       // Adopt the other tab's data, but never its session — each tab is
@@ -306,7 +320,28 @@ export function login(email, pass) {
   state.sessionId = u.id; emit();
   return { user: u };
 }
-export function logout() { state.sessionId = null; emit(); }
+let pendingSignout = Promise.resolve();
+export function waitForPendingSignout() { return pendingSignout; }
+export function logout() {
+  const user = currentUser();
+  const finalPresence = user?.role === "rep" ? endSession(user.id) : Promise.resolve();
+  if (DEMO) state.sessionId = null;
+  else state = hydrate(blankLive());
+  emit();
+  if (!DEMO) {
+    // A new sign-in must never race the former account's asynchronous logout.
+    pendingSignout = Promise.resolve(finalPresence).catch(() => {}).then(async () => {
+      try { await supabase.auth.signOut(); }
+      finally {
+        const { teardownLive } = await import("./api/bootstrap");
+        teardownLive();
+      }
+    }).catch((err) => {
+      console.error("[doorline] sign-out failed:", err);
+    });
+  }
+  return pendingSignout;
+}
 
 // ---------- personnel ----------
 export async function addUser({ name, email, role, plan, territory, pass, timezone, homeZip, homeLat, homeLng }) {
@@ -383,18 +418,36 @@ export function setConsent(repId, consent) {
   const p = (state.presence[repId] = state.presence[repId] || {});
   p.consent = consent; emit(); sync.consent(consent === "granted");
 }
+export function isAgentLive(p, now = Date.now()) { return agentLive(p, now, DEMO); }
 export function startSession(repId) {
   const p = (state.presence[repId] = state.presence[repId] || {});
-  p.online = true; p.since = Date.now(); emit();
+  p.online = true; p.since = Date.now(); p.lastSeen = Date.now();
+  p.lat = null; p.lng = null; // never publish a previous shift’s last-known location
+  emit();
+  return sync.presence({ repId, ...p }).catch(() => {});
+}
+export function heartbeatSession(repId) {
+  const p = state.presence[repId];
+  if (!p?.online) return;
+  p.lastSeen = Date.now();
+  return sync.presence({ repId, ...p }).catch(() => {});
 }
 export function endSession(repId) {
-  const p = state.presence[repId]; if (p) { p.online = false; emit(); }
+  const p = (state.presence[repId] = state.presence[repId] || {});
+  if (!p.online && p.lat == null && p.lng == null) return Promise.resolve();
+  p.online = false; p.lat = null; p.lng = null; p.lastSeen = Date.now(); emit();
+  return sync.presence({ repId, ...p });
 }
 export function addBreadcrumb(repId, pt) {
+  const p = (state.presence[repId] = state.presence[repId] || {});
+  if (!p.online) return;
+  const point = { lat: +pt.lat.toFixed(6), lng: +pt.lng.toFixed(6), ts: Date.now() };
   const arr = (state.tracks[repId] = state.tracks[repId] || []);
-  arr.push({ lat: +pt.lat.toFixed(6), lng: +pt.lng.toFixed(6), ts: Date.now() });
+  arr.push(point);
   if (arr.length > 600) arr.splice(0, arr.length - 600);
+  p.lat = point.lat; p.lng = point.lng; p.lastSeen = Date.now();
   emit(); sync.location({ lat: pt.lat, lng: pt.lng });
+  sync.presence({ repId, ...p }).catch(() => {});
 }
 export function clearTrack(repId) { state.tracks[repId] = []; emit(); }
 
@@ -405,12 +458,12 @@ export function repAccountability(repId) {
   const t = state.tracks[repId] || [];
   const p = state.presence[repId] || {};
   let mins = 0;
-  if (p.online && p.since) mins = Math.round((Date.now() - p.since) / 60000);
+  if (isAgentLive(p) && p.since) mins = Math.round((Date.now() - p.since) / 60000);
   else if (t.length > 1) mins = Math.round((t[t.length - 1].ts - t[0].ts) / 60000);
   const u = state.users.find((x) => x.id === repId);
   const today = localDayInTZ(u?.timezone);
   const doors = state.streetRows.filter((r) => r.repId === repId && r.date === today && (r.nh || r.rl || r.dm || r.bid || r.d || r.ni || r.nq || r.street)).length;
-  return { mins, doors, points: t.length, online: !!p.online, consent: p.consent };
+  return { mins, doors, points: t.length, online: isAgentLive(p), consent: p.consent };
 }
 
 // Default map center for a rep (their own home ZIP, else the org's, else
@@ -429,8 +482,9 @@ export function mapDefaultCenter(repId) {
 export function repGeofenceStatus(repId) {
   const zones = repZones(state, repId);
   if (!zones.length) return null;
+  const p = state.presence[repId];
   const pts = state.tracks[repId] || [];
-  const last = pts[pts.length - 1];
+  const last = isAgentLive(p) ? { lat: p.lat, lng: p.lng, ts: p.lastSeen } : pts[pts.length - 1];
   if (!last) return null;
   const inside = zones.some((z) => pointInPolygon([last.lat, last.lng], z.boundary));
   return { inside, zoneName: zones[0].name, at: last.ts };
@@ -444,7 +498,7 @@ export function repGeofenceStatus(repId) {
 export function geofenceAlerts() {
   return state.users
     .filter((u) => u.role === "rep")
-    .map((u) => ({ rep: u, geo: repGeofenceStatus(u.id), online: !!state.presence[u.id]?.online }))
+    .map((u) => ({ rep: u, geo: repGeofenceStatus(u.id), online: isAgentLive(state.presence[u.id]) }))
     .filter((x) => x.online && x.geo && !x.geo.inside)
     .map((x) => ({ repId: x.rep.id, repName: x.rep.name, zoneName: x.geo.zoneName, at: x.geo.at }));
 }
@@ -510,8 +564,17 @@ export function deleteReportBatch(id) {
 
 // ---------- daily sheet lifecycle ----------
 const dayKey = (repId, date) => repId + "|" + date;
-export function submitDay(repId, date) { state.submittedDays[dayKey(repId, date)] = true; emit(); }
-export function reopenDay(repId, date) { delete state.submittedDays[dayKey(repId, date)]; emit(); }
+export function submitDay(repId, date, notes = "") {
+  const id = dayKey(repId, date);
+  const entry = { id, repId, day: date, notes: String(notes).slice(0, 5000), submittedAt: Date.now() };
+  state.submittedDays[id] = { notes: entry.notes, submittedAt: entry.submittedAt };
+  emit(); push("daily_submissions", entry);
+}
+export function reopenDay(repId, date) {
+  const id = dayKey(repId, date);
+  delete state.submittedDays[id];
+  emit(); pushDel("daily_submissions", id);
+}
 export function isDaySubmitted(repId, date) { return !!state.submittedDays[dayKey(repId, date)]; }
 
 // Combined stats for My Day: map doors + street-sheet work.
@@ -598,9 +661,17 @@ function pushDel(table, id) { sync.del(table, id); }
 // ---------- live hydration + realtime (live mode only) ----------
 // Replace local slices with a server snapshot (api/bootstrap.initLive()).
 export function loadSnapshot(snap, sessionId) {
-  state = { ...state, ...snap, sessionId: sessionId ?? state.sessionId };
+  const self = sessionId ?? state.sessionId;
+  // GPS consent is a device-level, explicit user choice. A server resync may
+  // replace the company's live presence snapshot but must never silently
+  // treat that as consent or erase a choice made on this device.
+  const ownConsent = state.presence?.[self]?.consent;
+  const freshPresence = snap.presence
+    ? { ...snap.presence, ...(self && snap.presence[self]
+        ? { [self]: { ...snap.presence[self], consent: ownConsent } } : {}) }
+    : state.presence;
+  state = { ...state, ...snap, presence: freshPresence, sessionId: self };
   state.tracks = state.tracks || {};
-  state.presence = state.presence || {};
   emit();
 }
 // Merge a Realtime change into local state. Runs for every subscribed table
@@ -608,6 +679,9 @@ export function loadSnapshot(snap, sessionId) {
 // state repaints live — no manual reload needed.
 export function applyRemote(table, payload) {
   const row = payload.new, old = payload.old, ev = payload.eventType;
+  // A delayed Realtime echo is not newer than an unsent local mutation.
+  // Preserve the agent's edit until its queued write succeeds.
+  if (sync.isMutationPending(table, row?.id || old?.id)) return;
   const upsert = (list, item, unshift) => {
     const i = list.findIndex((x) => x.id === item.id);
     if (i >= 0) list[i] = { ...list[i], ...item }; else unshift ? list.unshift(item) : list.push(item);
@@ -637,6 +711,25 @@ export function applyRemote(table, payload) {
   } else if (table === "report_rows") {
     if (ev === "DELETE") state.reportRows = state.reportRows.filter((r) => r.id !== old?.id);
     else if (row) upsert(state.reportRows, M.reportRowFromRow(row));
+  } else if (table === "agent_presence") {
+    const repId = row?.rep_id || old?.rep_id;
+    if (repId) {
+      if (ev === "DELETE") delete state.presence[repId];
+      else if (row) state.presence[repId] = {
+        ...state.presence[repId], online: !!row.online,
+        lat: row.lat, lng: row.lng,
+        since: row.started_at ? Date.parse(row.started_at) : null,
+        lastSeen: Date.parse(row.last_seen), consent: state.presence[repId]?.consent,
+      };
+    }
+  } else if (table === "daily_submissions") {
+    const id = row?.id || old?.id;
+    if (id) {
+      if (ev === "DELETE") delete state.submittedDays[id];
+      else if (row) state.submittedDays[id] = {
+        notes: row.notes || "", submittedAt: Date.parse(row.submitted_at),
+      };
+    }
   }
   emit();
 }

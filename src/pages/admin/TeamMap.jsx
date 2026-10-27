@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useStore, getState, DISPOS, repAccountability, repGeofenceStatus, geofenceAlerts } from "../../store";
 import FieldMap from "../../components/FieldMap.jsx";
 
@@ -6,6 +7,8 @@ const since = (ts) => { const m = Math.max(0, Math.round((Date.now() - ts) / 600
 
 export default function TeamMap() {
   useStore();
+  const [, setClock] = useState(0);
+  useEffect(() => { const timer = setInterval(() => setClock(Date.now()), 15000); return () => clearInterval(timer); }, []);
   const state = getState();
   const worked = state.homes.filter((h) => h.status !== "untouched");
   const counts = Object.keys(DISPOS).reduce((a, k) => ({ ...a, [k]: state.homes.filter((h) => h.status === k).length }), {});

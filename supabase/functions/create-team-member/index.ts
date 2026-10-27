@@ -15,13 +15,26 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!; // never leaves the edge
 
+// Browser clients call this function from a separate Vercel origin.
+// Every response (including errors) needs CORS headers, and OPTIONS must
+// be answered before attempting JWT validation or parsing the body.
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-retry-count, traceparent, tracestate, baggage",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Max-Age": "3600",
+};
 const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  new Response(JSON.stringify(body), {
+    status, headers: { ...corsHeaders, "content-type": "application/json" },
+  });
 
 const ALLOWED_ROLES = ["rep", "manager", "admin", "viewer"];
 const FREE_ROLES = ["admin", "owner", "viewer"];
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
   const auth = req.headers.get("Authorization") ?? "";
@@ -34,9 +47,12 @@ Deno.serve(async (req) => {
   if (!u?.user) return json({ error: "unauthenticated" }, 401);
 
   const svc = createClient(SUPABASE_URL, SERVICE_KEY);
-  const { data: caller } = await svc.from("profiles").select("org_id, role").eq("id", u.user.id).single();
+  const { data: caller } = await svc.from("profiles").select("org_id, role, status").eq("id", u.user.id).single();
   if (!caller) return json({ error: "no_profile" }, 403);
-  if (!["owner", "admin"].includes(caller.role)) return json({ error: "forbidden" }, 403);
+  // Deactivation takes effect immediately, even while a JWT remains valid.
+  if (caller.status !== "active" || !["owner", "admin"].includes(caller.role)) {
+    return json({ error: "forbidden" }, 403);
+  }
 
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ error: "bad_json" }, 400); }
@@ -45,6 +61,18 @@ Deno.serve(async (req) => {
   const name = String(body.name ?? "").trim();
   const role = ALLOWED_ROLES.includes(String(body.role)) ? String(body.role) : "rep";
   if (!email || !name) return json({ error: "missing_fields" }, 400);
+
+  // The same one-use company invitation powers admin-created accounts and
+  // self-enrollment. This avoids trusting forgeable user_metadata authorization
+  // flags and guarantees the auth trigger joins this administrator's org.
+  const { data: inviteToken, error: inviteError } = await asUser.rpc("create_company_invite", {
+    p_max_uses: 1,
+    p_expires_days: 1,
+  });
+  if (inviteError || !inviteToken) return json({
+    error: "invite_failed",
+    detail: inviteError?.message ?? "Could not issue a company-bound invitation.",
+  }, 400);
 
   // A temporary password the admin relays to the new hire (they can be
   // prompted to change it later). Admin may also supply their own.
@@ -56,16 +84,14 @@ Deno.serve(async (req) => {
     email,
     password: tempPassword,
     email_confirm: true,
-    // doorline_invited lives in user_metadata (set atomically at INSERT) so
-    // the handle_new_user trigger reliably steps aside — see migration 0013.
-    user_metadata: { full_name: name, doorline_invited: true },
+    // Migration 0019 validates this one-use invite *inside* the auth.users
+    // insertion transaction and creates a rep profile in the correct company.
+    user_metadata: { full_name: name, doorline_invite: inviteToken },
   });
   if (cErr || !created?.user) return json({ error: "create_failed", detail: cErr?.message ?? "no_user" }, 400);
 
   const free = FREE_ROLES.includes(role);
-  const { error: pErr } = await svc.from("profiles").insert({
-    id: created.user.id,
-    org_id: caller.org_id,
+  const { error: pErr } = await svc.from("profiles").update({
     full_name: name,
     email,
     role,
@@ -76,7 +102,7 @@ Deno.serve(async (req) => {
     home_zip: (body.homeZip as string) || null,
     home_lat: typeof body.homeLat === "number" ? body.homeLat : null,
     home_lng: typeof body.homeLng === "number" ? body.homeLng : null,
-  });
+  }).eq("id", created.user.id).eq("org_id", caller.org_id).select("id").single();
   if (pErr) {
     // Don't leave an orphan auth user if the profile couldn't be written.
     await svc.auth.admin.deleteUser(created.user.id);

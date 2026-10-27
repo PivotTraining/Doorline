@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef, memo } from "react";
 import { useStore, getState, SHEET_COLS, addStreetRow, updateStreetRow, removeStreetRow, sheetTotals, submitDay, reopenDay, isDaySubmitted, activeProducts, updateDeal } from "../../store";
 import { localDay } from "../../lib/date.js";
+import { isMutationPending, subscribeWrites } from "../../api/sync.js";
 
 const SLOTS = 100;
 const today = () => localDay();
@@ -22,8 +23,9 @@ const BLANK = { street: "", customer: "", phone: "", comments: "", cb: "" };
 // see it happen. Nudge the field into view whenever it gains focus.
 const keepVisible = (e) => { e.target.scrollIntoView({ block: "nearest", inline: "nearest" }); };
 
-const Row = memo(function Row({ slot, id, street, nh, rl, dm, bid, d, ni, nq, customer, phone, comments, cb, dealId, product, products, onSet, onCreate, onRemove, onSetProduct }) {
+const Row = memo(function Row({ slot, id, street, nh, rl, dm, bid, d, ni, nq, customer, phone, comments, cb, dealId, product, products, onSet, onCreate, onRemove, onSetProduct, disabled }) {
   const [draft, setDraft] = useState(BLANK);
+  const createdIdRef = useRef(null); // hold the ID synchronously until parent rerenders
   // While a text field is focused, it is its own source of truth. In live
   // mode every keystroke is written to the server, which echoes the row back
   // a beat later via Realtime; without this buffer that stale echo merges in
@@ -33,6 +35,7 @@ const Row = memo(function Row({ slot, id, street, nh, rl, dm, bid, d, ni, nq, cu
   // genuine edit from another device still shows).
   const [editing, setEditing] = useState(null); // { key, value } | null
   const isReal = !!id;
+  const activeId = id || createdIdRef.current;
   const cur = isReal ? { street, customer, phone, comments, cb, nh, rl, dm, bid, d, ni, nq } : draft;
 
   const textVal = (key) => (editing && editing.key === key ? editing.value : (cur[key] ?? ""));
@@ -42,30 +45,32 @@ const Row = memo(function Row({ slot, id, street, nh, rl, dm, bid, d, ni, nq, cu
   const setText = (key) => (e) => {
     const value = e.target.value;
     setEditing({ key, value });
-    if (isReal) { onSet(id, { [key]: value }); return; }
+    if (activeId) { onSet(activeId, { [key]: value }); return; }
     const merged = { ...draft, [key]: value };
     setDraft(merged);
-    if (Object.values(merged).some((x) => x.trim())) onCreate(slot, merged);
+    if (!createdIdRef.current && Object.values(merged).some((x) => x.trim())) {
+      createdIdRef.current = onCreate(slot, merged)?.id || null;
+    }
   };
   const setFlag = (key) => (e) => {
     const value = e.target.checked;
-    if (isReal) { onSet(id, { [key]: value }); return; }
+    if (activeId) { onSet(activeId, { [key]: value }); return; }
     if (!value) return; // unchecking a slot that was never created is a no-op
     const merged = { ...draft, [key]: true };
     setDraft(merged);
-    onCreate(slot, merged);
+    if (!createdIdRef.current) createdIdRef.current = onCreate(slot, merged)?.id || null;
   };
 
   return (
     <tr className={isReal ? undefined : "sheet-row-blank"}>
       <td className="muted" style={{ textAlign: "center" }}>{slot}</td>
-      <td><input className="input" style={pad} value={textVal("street")} placeholder="Street address" autoComplete="off" onFocus={onTextFocus("street")} onBlur={onTextBlur} onChange={setText("street")} /></td>
+      <td><input className="input" disabled={disabled} style={pad} value={textVal("street")} placeholder="Street address" autoComplete="off" onFocus={onTextFocus("street")} onBlur={onTextBlur} onChange={setText("street")} /></td>
       {SHEET_COLS.map((c) => (
         <td key={c.key} style={cellStyle}>
-          <input type="checkbox" checked={!!cur[c.key]} onChange={setFlag(c.key)} style={{ width: 18, height: 18, accentColor: "var(--brand)" }} />
+          <input type="checkbox" disabled={disabled} checked={!!cur[c.key]} onChange={setFlag(c.key)} style={{ width: 18, height: 18, accentColor: "var(--brand)" }} />
           {c.key === "d" && cur.d && dealId && (
             <select
-              className="select"
+              className="select" disabled={disabled}
               value={product || products[0]}
               onChange={(e) => onSetProduct(dealId, e.target.value)}
               title="What did you sell?"
@@ -76,13 +81,13 @@ const Row = memo(function Row({ slot, id, street, nh, rl, dm, bid, d, ni, nq, cu
           )}
         </td>
       ))}
-      <td><input className="input" style={pad} value={textVal("customer")} autoComplete="off" onFocus={onTextFocus("customer")} onBlur={onTextBlur} onChange={setText("customer")} /></td>
-      <td><input className="input" style={pad} type="tel" value={textVal("phone")} placeholder="phone → nudge" autoComplete="off" onFocus={onTextFocus("phone")} onBlur={onTextBlur} onChange={setText("phone")} /></td>
-      <td><input className="input" style={pad} value={textVal("comments")} autoComplete="off" onFocus={onTextFocus("comments")} onBlur={onTextBlur} onChange={setText("comments")} /></td>
-      <td><input className="input" style={pad} value={textVal("cb")} placeholder="5:30" autoComplete="off" onFocus={onTextFocus("cb")} onBlur={onTextBlur} onChange={setText("cb")} /></td>
+      <td><input className="input" style={pad} disabled={disabled} value={textVal("customer")} autoComplete="off" onFocus={onTextFocus("customer")} onBlur={onTextBlur} onChange={setText("customer")} /></td>
+      <td><input className="input" style={pad} type="tel" disabled={disabled} value={textVal("phone")} placeholder="phone → nudge" autoComplete="off" onFocus={onTextFocus("phone")} onBlur={onTextBlur} onChange={setText("phone")} /></td>
+      <td><input className="input" style={pad} disabled={disabled} value={textVal("comments")} autoComplete="off" onFocus={onTextFocus("comments")} onBlur={onTextBlur} onChange={setText("comments")} /></td>
+      <td><input className="input" style={pad} disabled={disabled} value={textVal("cb")} placeholder="5:30" autoComplete="off" onFocus={onTextFocus("cb")} onBlur={onTextBlur} onChange={setText("cb")} /></td>
       <td style={{ paddingLeft: 10 }}>
         {isReal && (
-          <button className="x" title="Clear" onClick={() => {
+          <button className="x" title="Clear" disabled={disabled} onClick={() => {
             // The delete button sits right next to the CB field — on a phone
             // a slightly-off tap while reaching for CB can land here instead
             // and instantly wipe everything logged for the door. Anything
@@ -90,7 +95,7 @@ const Row = memo(function Row({ slot, id, street, nh, rl, dm, bid, d, ni, nq, cu
             // touched row can still be cleared with one tap.
             const hasContent = Object.values(cur).some((v) => (typeof v === "string" ? v.trim() : v));
             if (hasContent && !confirm("Clear this door? This removes everything logged for it, including any callback time.")) return;
-            onRemove(id); setDraft(BLANK);
+            onRemove(id); createdIdRef.current = null; setDraft(BLANK);
           }}>×</button>
         )}
       </td>
@@ -103,6 +108,9 @@ export default function StreetSheet({ user }) {
   const state = getState();
   const [date, setDate] = useState(today());
   const [extraSlots, setExtraSlots] = useState(0);
+  const [closeoutNotes, setCloseoutNotes] = useState(
+    () => getState().submittedDays[`${user.id}|${today()}`]?.notes || ""
+  );
   useEffect(() => { setExtraSlots(0); }, [date]);
   const autoToday = useRef(true); // false once the rep explicitly picks a different date
 
@@ -119,6 +127,17 @@ export default function StreetSheet({ user }) {
   const rows = state.streetRows.filter((r) => r.repId === user.id && r.date === date);
   const t = sheetTotals(rows);
   const submitted = isDaySubmitted(user.id, date);
+  const [pendingCloseout, setPendingCloseout] = useState(false);
+  useEffect(() => {
+    const update = () => setPendingCloseout(isMutationPending("daily_submissions", `${user.id}|${date}`));
+    update();
+    return subscribeWrites(update);
+  }, [user.id, date]);
+  const submittedNotes = state.submittedDays[`${user.id}|${date}`]?.notes || "";
+  useEffect(() => {
+    if (submitted) setCloseoutNotes(submittedNotes);
+  }, [submitted, submittedNotes, date]);
+  const missingDisposition = rows.filter((r) => !SHEET_COLS.some((c) => r[c.key]) && !r.cb).length;
   const products = activeProducts();
   const dealsById = Object.fromEntries(state.deals.map((d) => [d.id, d]));
 
@@ -130,13 +149,15 @@ export default function StreetSheet({ user }) {
   // Place worked rows by their slot; lay everything else out across the grid.
   const bySlot = {};
   const noSlot = [];
-  rows.forEach((r) => (r.slot ? (bySlot[r.slot] = r) : noSlot.push(r)));
+  rows.forEach((r) => (r.slot && !bySlot[r.slot] ? (bySlot[r.slot] = r) : noSlot.push(r)));
   let n = 1; noSlot.forEach((r) => { while (bySlot[n]) n++; bySlot[n] = r; n++; });
   const touchedMax = Object.keys(bySlot).reduce((m, k) => Math.max(m, Number(k)), 0);
   const maxSlot = Math.max(SLOTS + extraSlots, touchedMax);
 
   const complete = () => {
-    if (confirm(`Complete ${date}'s sheet? You can reopen it if needed. Tomorrow starts a fresh sheet.`)) submitDay(user.id, date);
+    if (confirm(`Submit daily closeout for ${date}? ${t.doors} doors, ${t.d} deals, ${missingDisposition} rows without a final disposition. You can reopen it if needed.`)) {
+      submitDay(user.id, date, closeoutNotes);
+    }
   };
 
   return (
@@ -148,11 +169,11 @@ export default function StreetSheet({ user }) {
         </div>
         <div className="row">
           <label className="field" style={{ margin: 0 }}>
-            <input className="input" type="date" value={date} onChange={(e) => { autoToday.current = false; setDate(e.target.value); }} style={{ width: "auto" }} />
+            <input className="input" type="date" value={date} onChange={(e) => { autoToday.current = false; setDate(e.target.value); setCloseoutNotes(state.submittedDays[`${user.id}|${e.target.value}`]?.notes || ""); }} style={{ width: "auto" }} />
           </label>
           {submitted
-            ? <><span className="pill"><span className="dot" style={{ background: "var(--green)" }} /> Submitted</span><button className="btn" onClick={() => reopenDay(user.id, date)}>Reopen</button></>
-            : <button className="btn primary" onClick={complete} disabled={t.doors === 0}>✓ Complete day</button>}
+            ? <><span className="pill"><span className="dot" style={{ background: pendingCloseout ? "var(--amber)" : "var(--green)" }} /> {pendingCloseout ? "Closeout queued for sync" : "Submitted to company"}</span><button className="btn" onClick={() => reopenDay(user.id, date)}>Reopen</button></>
+            : <button className="btn primary" onClick={complete}>✓ Submit daily closeout</button>}
         </div>
       </div>
 
@@ -184,7 +205,7 @@ export default function StreetSheet({ user }) {
               const slot = i + 1;
               const r = bySlot[slot];
               return (
-                <Row key={slot} slot={slot}
+                <Row key={`${date}:${slot}`} slot={slot} disabled={submitted}
                   id={r?.id} street={r?.street} nh={r?.nh} rl={r?.rl} dm={r?.dm} bid={r?.bid} d={r?.d} ni={r?.ni} nq={r?.nq}
                   customer={r?.customer} phone={r?.phone} comments={r?.comments} cb={r?.cb}
                   dealId={r?.dealId} product={r?.dealId ? dealsById[r.dealId]?.product : undefined} products={products}
@@ -195,6 +216,20 @@ export default function StreetSheet({ user }) {
         </table>
       </div>
 
+      <div className="card" style={{ marginTop: 14 }}>
+        <h3 style={{ marginTop: 0 }}>End-of-day review</h3>
+        <p className="muted" style={{ fontSize: 13 }}>
+          Review the entries above. The company receives your existing dispositions automatically. No reentry required.
+          {missingDisposition > 0 ? ` ${missingDisposition} address(es) have no recorded disposition.` : " Every entry has a disposition."}
+        </p>
+        <label className="field">
+          <span>Shift notes / follow-ups for your manager</span>
+          <textarea className="input" rows={3} disabled={submitted} maxLength={5000}
+            value={closeoutNotes} onChange={(e) => setCloseoutNotes(e.target.value)}
+            placeholder="Unfinished streets, promising leads, callbacks or anything your manager should know…" />
+        </label>
+        {submitted && <p className="muted" style={{ fontSize: 13 }}>{pendingCloseout ? "Saved on this device. Your manager will receive this closeout once the queued changes finish syncing." : "Submitted to company. Reopen the day to make corrections and submit again."}</p>}
+      </div>
       <div className="row between" style={{ marginTop: 10, flexWrap: "wrap", gap: 10 }}>
         <p className="muted" style={{ fontSize: 12, margin: 0 }}>
           <b>Key:</b> NH Not Home · RL Reloop · DM Decision Maker · B/ID Bill or ID · D Deal (→ My Deals) · NI Not Interested · NQ Not Qualified · CB Call Back

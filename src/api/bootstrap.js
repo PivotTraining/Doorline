@@ -7,7 +7,8 @@ import * as auth from "./auth";
 import * as S from "./services";
 import { subscribeOrg } from "./realtime";
 import { setCtx } from "./context";
-import { startLocationFlush, startWriteFlush } from "./sync";
+import { startLocationFlush, startWriteFlush, pendingChanges } from "./sync";
+import { overlayPending } from "../lib/pendingOverlay.js";
 import { loadSnapshot, applyRemote } from "../store";
 
 let unsub = null;
@@ -31,9 +32,9 @@ async function resync() {
   lastResync = now;
   try {
     const snap = await S.loadAll();
-    loadSnapshot(snap, activeProfile.id);
+    loadSnapshot(overlayPending(snap, pendingChanges()), activeProfile.id);
     const reports = await S.loadReports();
-    if (reports) loadSnapshot(reports, activeProfile.id);
+    if (reports) loadSnapshot(overlayPending(reports, pendingChanges()), activeProfile.id);
   } catch {
     // A failed resync is non-fatal — the live socket and write queue carry on.
   } finally {
@@ -54,25 +55,30 @@ function startResync() {
 export async function initLive() {
   if (DEMO) return null;
   const profile = await auth.myProfile();
-  if (!profile) return null;                 // not signed in yet
+  if (!profile) {
+    teardownLive();
+    return null;
+  }
+  // A half-finished login must not leave a former account's tenant scope,
+  // socket or offline queue active if a required backend table is missing.
+  teardownLive();
   activeProfile = profile;
   setCtx({ orgId: profile.org_id, repId: profile.id });
-  const snap = await S.loadAll();
-  loadSnapshot(snap, profile.id);
-  // Reports load separately + best-effort: a missing report table must not
-  // stop the app from booting.
-  const reports = await S.loadReports();
-  if (reports) loadSnapshot(reports, profile.id);
-  lastResync = Date.now();                    // fresh snapshot — don't immediately re-pull
-  if (unsub) unsub();
-  unsub = subscribeOrg(profile.org_id, applyRemote);
-  if (stopFlush) stopFlush();
-  stopFlush = startLocationFlush();          // drain the GPS queue on an interval
-  if (stopWriteFlush) stopWriteFlush();
-  stopWriteFlush = startWriteFlush();        // retry any queued homes/deals/street-sheet writes
-  if (stopResync) stopResync();
-  stopResync = startResync();                // re-pull a snapshot on tab-focus / reconnect
-  return profile;
+  try {
+    const snap = await S.loadAll();
+    loadSnapshot(overlayPending(snap, pendingChanges()), profile.id);
+    const reports = await S.loadReports();
+    if (reports) loadSnapshot(overlayPending(reports, pendingChanges()), profile.id);
+    lastResync = Date.now();
+    unsub = subscribeOrg(profile.org_id, applyRemote);
+    stopFlush = startLocationFlush();
+    stopWriteFlush = startWriteFlush();
+    stopResync = startResync();
+    return profile;
+  } catch (error) {
+    teardownLive();
+    throw error;
+  }
 }
 
 export function teardownLive() {
@@ -81,4 +87,5 @@ export function teardownLive() {
   if (stopWriteFlush) { stopWriteFlush(); stopWriteFlush = null; }
   if (stopResync) { stopResync(); stopResync = null; }
   activeProfile = null;
+  setCtx({ orgId: null, repId: null });
 }

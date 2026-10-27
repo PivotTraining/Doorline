@@ -12,10 +12,23 @@ const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!; // bypasses RLS; never leaves the edge
 const MAX_BATCH = 200;
 
+// Browser clients call this function from a separate Vercel origin.
+// Every response (including errors) needs CORS headers, and OPTIONS must
+// be answered before attempting JWT validation or parsing the body.
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-retry-count, traceparent, tracestate, baggage",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Max-Age": "3600",
+};
 const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  new Response(JSON.stringify(body), {
+    status, headers: { ...corsHeaders, "content-type": "application/json" },
+  });
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
   const auth = req.headers.get("Authorization") ?? "";
@@ -29,8 +42,13 @@ Deno.serve(async (req) => {
 
   // Service client for the privileged consent check + insert.
   const svc = createClient(SUPABASE_URL, SERVICE_KEY);
-  const { data: profile } = await svc.from("profiles").select("org_id").eq("id", u.user.id).single();
+  const { data: profile } = await svc.from("profiles")
+    .select("org_id, role, status").eq("id", u.user.id).single();
   if (!profile) return json({ error: "no_profile" }, 403);
+  // JWTs do not immediately expire when an employee is deactivated.
+  if (profile.status !== "active" || profile.role !== "rep") {
+    return json({ error: "forbidden" }, 403);
+  }
 
   // Legal gate: refuse to record without active consent.
   const { data: consent } = await svc.from("consents").select("state").eq("rep_id", u.user.id).single();
@@ -38,10 +56,22 @@ Deno.serve(async (req) => {
 
   let body: { points?: Array<{ lat: number; lng: number; ts?: string }> };
   try { body = await req.json(); } catch { return json({ error: "bad_json" }, 400); }
-  const points = (body.points ?? []).slice(0, MAX_BATCH).filter(
-    (p) => typeof p.lat === "number" && typeof p.lng === "number" &&
-           Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180
+  if (!Array.isArray(body?.points) || body.points.length > MAX_BATCH) {
+    return json({ error: "invalid_batch" }, 400);
+  }
+  const now = Date.now();
+  const points = body.points.filter(
+    (p) => p !== null && typeof p === "object" &&
+      typeof p.lat === "number" && typeof p.lng === "number" &&
+      Number.isFinite(p.lat) && Number.isFinite(p.lng) &&
+      Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180 &&
+      (p.ts === undefined ||
+        (typeof p.ts === "string" && Number.isFinite(Date.parse(p.ts)) &&
+          Date.parse(p.ts) >= now - 90 * 86400_000 &&
+          Date.parse(p.ts) <= now + 5 * 60_000))
   );
+  // Reject mixed invalid batches instead of silently losing unaccepted points.
+  if (points.length !== body.points.length) return json({ error: "invalid_point" }, 400);
   if (points.length === 0) return json({ accepted: 0 });
 
   const rows = points.map((p) => ({

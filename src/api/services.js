@@ -11,7 +11,7 @@ const org = () => getCtx().orgId;
 
 // Initial hydrate: one round of reads → a store-shaped snapshot.
 export async function loadAll() {
-  const [o, profiles, homes, deals, posts, territories, street] = await Promise.all([
+  const [o, profiles, homes, deals, posts, territories, street, presence, closeouts] = await Promise.all([
     supabase.from("organizations").select("*").limit(1).single(),
     supabase.from("profiles").select("*"),
     supabase.from("homes").select("*"),
@@ -19,7 +19,16 @@ export async function loadAll() {
     supabase.from("posts").select("*, profiles(full_name)"),
     supabase.from("territories").select("*"),
     supabase.from("street_rows").select("*").order("slot", { nullsFirst: false }).order("created_at"),
+    supabase.from("agent_presence").select("*"),
+    supabase.from("daily_submissions").select("*"),
   ]);
+  // A missing migration, inaccessible table, or RLS error is NOT an empty
+  // company's activity. Never replace a rep's pending local work with a
+  // fabricated empty server snapshot when these reads fail.
+  const checked = { organizations: o, profiles, homes, deals, posts, territories,
+    street_rows: street, agent_presence: presence, daily_submissions: closeouts };
+  const failed = Object.entries(checked).find(([, response]) => response.error);
+  if (failed) throw new Error(`Doorline company data unavailable: ${failed[0]}`);
   return {
     org: o.data
       ? { name: o.data.name, logo: o.data.logo_path, homeZip: o.data.home_zip || null, homeLat: o.data.home_lat ?? null, homeLng: o.data.home_lng ?? null,
@@ -31,6 +40,13 @@ export async function loadAll() {
     posts: (posts.data || []).map((r) => M.postFromRow({ ...r, author_name: r.profiles?.full_name })),
     territories: (territories.data || []).map(M.territoryFromRow),
     streetRows: (street.data || []).map(M.streetRowFromRow),
+    presence: Object.fromEntries((presence.data || []).map((p) => [p.rep_id, {
+      online: p.online, since: p.started_at ? Date.parse(p.started_at) : null,
+      lastSeen: Date.parse(p.last_seen), lat: p.lat, lng: p.lng, consent: undefined,
+    }])),
+    submittedDays: Object.fromEntries((closeouts.data || []).map((r) => [r.id, {
+      submittedAt: Date.parse(r.submitted_at), notes: r.notes || "",
+    }])),
   };
 }
 
@@ -49,15 +65,38 @@ export const deleteTerritory = (id)     => supabase.from("territories").delete()
 // once without that one field so the door itself still saves -- losing the
 // deal link is recoverable, losing the entry is not.
 export const upsertStreetRow = async (r) => {
-  const row = M.streetRowToRow(r, org());
-  const res = await supabase.from("street_rows").upsert(row);
+  let row = M.streetRowToRow(r, org());
+  let res = await supabase.from("street_rows").upsert(row);
   if (res?.error && "deal_id" in row && /deal_id/.test(res.error.message || "")) {
     const { deal_id, ...withoutLink } = row;
-    return supabase.from("street_rows").upsert(withoutLink);
+    row = withoutLink;
+    res = await supabase.from("street_rows").upsert(row);
+  }
+  // Concurrent edits from two devices can claim the same slot. Preserve the
+  // later row's actual data in an unassigned slot rather than lose a day of
+  // fieldwork to a permanent unique-constraint failure.
+  if (res?.error?.code === "23505"
+      && /street_rows_one_slot_per_agent_day/.test(res.error.message || "")) {
+    res = await supabase.from("street_rows").upsert({ ...row, slot: null });
   }
   return res;
 };
 export const deleteStreetRow = (id)     => supabase.from("street_rows").delete().eq("id", id);
+export const upsertDailySubmission = (r) => supabase.from("daily_submissions").upsert({
+  id: r.id, org_id: org(), rep_id: r.repId, day: r.day,
+  notes: r.notes || "", submitted_at: new Date(r.submittedAt).toISOString(),
+}, { onConflict: "id" });
+export const deleteDailySubmission = (id) => supabase.from("daily_submissions").delete().eq("id", id);
+// Presence is deliberately ephemeral; offline/closed browsers expire after 90s.
+// Do not feed heartbeats through the durable queue, where delayed "online" writes
+// could reappear AFTER a rep signed out.
+export const upsertAgentPresence = (p) => supabase.from("agent_presence").upsert({
+  rep_id: p.repId, org_id: org(), online: !!p.online,
+  lat: p.online ? (p.lat ?? null) : null,
+  lng: p.online ? (p.lng ?? null) : null,
+  started_at: p.since ? new Date(p.since).toISOString() : null,
+  last_seen: new Date().toISOString(),
+}, { onConflict: "rep_id" });
 export const upsertReportBatch = (b)    => supabase.from("report_batches").upsert(M.reportBatchToRow(b, org()));
 export const deleteReportBatch = (id)   => supabase.from("report_batches").delete().eq("id", id);
 export const upsertReportRow   = (r)    => supabase.from("report_rows").upsert(M.reportRowToRow(r, org()));

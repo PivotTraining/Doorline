@@ -4,11 +4,17 @@ import { localDay } from "./date.js";
 export function toCSV(rows) {
   if (!rows || rows.length === 0) return "";
   const headers = Object.keys(rows[0]);
-  const esc = (v) => {
-    v = v == null ? "" : String(v);
-    return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+  const esc = (value) => {
+    let v = value == null ? "" : String(value);
+    // Neutralize spreadsheet formulas in user-supplied cell values AND
+    // uploaded column headings. Numeric cells remain numeric.
+    if (typeof value === "string" && /^[\s\u0000-\u001f]*[=+@-]/.test(v)) v = "'" + v;
+    return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
   };
-  return [headers.join(","), ...rows.map((r) => headers.map((h) => esc(r[h])).join(","))].join("\n");
+  return [
+    headers.map(esc).join(","),
+    ...rows.map((r) => headers.map((h) => esc(r[h])).join(",")),
+  ].join("\n");
 }
 
 export function downloadCSV(filename, rows) {

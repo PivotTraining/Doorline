@@ -10,25 +10,25 @@
 // ===========================================================
 const KEY = "doorline_write_queue_v1";
 
-function load() {
+function load(key = KEY) {
   try {
-    return JSON.parse(localStorage.getItem(KEY)) || [];
+    return JSON.parse(localStorage.getItem(key)) || [];
   } catch {
     return [];
   }
 }
 
-function save(q) {
+function save(q, key = KEY) {
   try {
-    localStorage.setItem(KEY, JSON.stringify(q));
+    localStorage.setItem(key, JSON.stringify(q));
   } catch {
     // Storage full/unavailable -- queue stays in memory for this session.
   }
 }
 
 // handlers: { [table]: { upsert(payload), del(id) } }
-export function createWriteQueue({ handlers, persist = true }) {
-  let q = persist ? load() : [];
+export function createWriteQueue({ handlers, persist = true, storageKey = KEY, canFlush = () => true }) {
+  let q = persist ? load(storageKey) : [];
   let flushing = false;
   const listeners = new Set();
 
@@ -50,12 +50,12 @@ export function createWriteQueue({ handlers, persist = true }) {
       queuedAt: Date.now(),
     });
 
-    if (persist) save(q);
+    if (persist) save(q, storageKey);
     notify();
   }
 
   async function flush() {
-    if (flushing || q.length === 0) {
+    if (flushing || q.length === 0 || !canFlush()) {
       return { flushed: 0, remaining: q.length };
     }
 
@@ -77,6 +77,10 @@ export function createWriteQueue({ handlers, persist = true }) {
     };
 
     for (const item of batch) {
+      // When another user or organization takes over the browser, leave every
+      // outstanding entry parked for its original owner; never replay it as
+      // the newly signed-in account.
+      if (!canFlush()) break;
       const handler = handlers[item.table];
 
       if (!handler) {
@@ -119,7 +123,7 @@ export function createWriteQueue({ handlers, persist = true }) {
 
     const hasNewWrites = q.some((item) => !batch.includes(item));
 
-    if (persist) save(q);
+    if (persist) save(q, storageKey);
 
     flushing = false;
     notify();
@@ -142,6 +146,7 @@ export function createWriteQueue({ handlers, persist = true }) {
     enqueue,
     flush,
     size: () => q.length,
+    pending: () => q.map((item) => ({ ...item })),
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
