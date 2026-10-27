@@ -6,16 +6,15 @@ export function toCSV(rows) {
   const headers = Object.keys(rows[0]);
   const esc = (value) => {
     let v = value == null ? "" : String(value);
-    // CSV fields may come from agent-entered contacts, notes, and imported
-    // column headings. Spreadsheet applications can execute leading formula
-    // characters as commands. Prefix dangerous strings with a literal quote.
-    if (typeof value === "string" && /^[\\s\\u0000-\\u001f]*[=+@-]/.test(v)) v = "'" + v;
-    return /[",\\n\\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+    // Neutralize spreadsheet formulas in user-supplied cell values AND
+    // uploaded column headings. Numeric cells remain numeric.
+    if (typeof value === "string" && /^[\s\u0000-\u001f]*[=+@-]/.test(v)) v = "'" + v;
+    return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
   };
   return [
     headers.map(esc).join(","),
     ...rows.map((r) => headers.map((h) => esc(r[h])).join(",")),
-  ].join("\\n");
+  ].join("\n");
 }
 
 export function downloadCSV(filename, rows) {
