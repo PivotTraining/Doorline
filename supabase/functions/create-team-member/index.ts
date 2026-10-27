@@ -15,13 +15,26 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!; // never leaves the edge
 
+// Browser clients call this function from a separate Vercel origin.
+// Every response (including errors) needs CORS headers, and OPTIONS must
+// be answered before attempting JWT validation or parsing the body.
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-retry-count, traceparent, tracestate, baggage",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Max-Age": "3600",
+};
 const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  new Response(JSON.stringify(body), {
+    status, headers: { ...corsHeaders, "content-type": "application/json" },
+  });
 
 const ALLOWED_ROLES = ["rep", "manager", "admin", "viewer"];
 const FREE_ROLES = ["admin", "owner", "viewer"];
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
   const auth = req.headers.get("Authorization") ?? "";
