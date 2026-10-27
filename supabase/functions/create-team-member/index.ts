@@ -34,9 +34,12 @@ Deno.serve(async (req) => {
   if (!u?.user) return json({ error: "unauthenticated" }, 401);
 
   const svc = createClient(SUPABASE_URL, SERVICE_KEY);
-  const { data: caller } = await svc.from("profiles").select("org_id, role").eq("id", u.user.id).single();
+  const { data: caller } = await svc.from("profiles").select("org_id, role, status").eq("id", u.user.id).single();
   if (!caller) return json({ error: "no_profile" }, 403);
-  if (!["owner", "admin"].includes(caller.role)) return json({ error: "forbidden" }, 403);
+  // Deactivation takes effect immediately, even while a JWT remains valid.
+  if (caller.status !== "active" || !["owner", "admin"].includes(caller.role)) {
+    return json({ error: "forbidden" }, 403);
+  }
 
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return json({ error: "bad_json" }, 400); }
