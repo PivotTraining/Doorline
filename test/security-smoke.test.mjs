@@ -25,6 +25,19 @@ test("SECURITY: disabled profiles lose their tenant scope even with old sessions
   assert.match(migration, /revoke execute on function public\.refresh_analytics/);
 });
 
+test("SMOKE: browser edge functions handle authenticated CORS preflight", () => {
+  for (const source of [ingest, team]) {
+    assert.match(source, /if \(req\.method === "OPTIONS"\)/);
+    assert.match(source, /"Access-Control-Allow-Origin": "\*"/);
+    assert.match(source, /"Access-Control-Allow-Headers":/);
+    assert.match(source, /"Access-Control-Allow-Methods": "POST, OPTIONS"/);
+    assert.match(source, /headers: \{ \.\.\.corsHeaders, "content-type": "application\/json" \}/);
+    assert.ok(source.indexOf('req.method === "OPTIONS"') <
+              source.indexOf('req.method !== "POST"'),
+              "preflight must be handled before rejecting non-POST requests");
+  }
+});
+
 test("SECURITY: privileged edge endpoints verify active roles", () => {
   assert.match(ingest, /profile\.status !== "active" \|\| profile\.role !== "rep"/);
   assert.match(team, /caller\.status !== "active"/);
