@@ -122,3 +122,43 @@ CI runs JavaScript tests and a Vite build. SQL validity tests are structural
 checks only; they do not run the migration inside PostgreSQL and do not test
 Postgres RLS execution or tenant boundary isolation. Those remain manual
 release blockers.
+
+## Security and smoke-test remediation (October 27, 2026)
+
+- Migration 0020 `supabase/migrations/0020_active_agent_rpc_hardening.sql`
+  replaces an unsafe `record_door_activity` SECURITY DEFINER implementation:
+  an authenticated agent may update only authorized doors belonging to their
+  organization; reps are restricted to their assigned doors.
+- Inactive/deactivated users lose `current_org_id()` and `current_user_role()`
+  scope immediately even with still-valid JWTs; `set_consent` now requires an
+  active rep. Maintenance functions are no longer executable by app roles.
+- Both Supabase Edge Functions validate that the caller's profile is active.
+  GPS ingestion rejects invalid coordinate values, invalid timestamps,
+  non-arrays, and oversized or partially invalid batches.
+- Both browser-called Edge Functions now respond to OPTIONS and include CORS
+  headers on every response. Without this, browser-based team creation and
+  GPS upload fail at preflight.
+- GPS buffer now serializes concurrent flushes and preserves partially
+  accepted samples. CSV exports escape dangerous user-entered spreadsheet
+  formulas in fields and column headings. New `test/security-smoke.test.mjs`
+  covers these cases.
+- Failed initial Supabase hydration clears tenant context, old subscriptions,
+  and retry timers instead of retaining a half-open previous session.
+- `supabase/tests/doorline_smoke_readonly.sql` can be run in Doorline's SQL
+  Editor to verify policy and schema presence, tenant IDs, and RPC privilege
+  hardening without mutating any records.
+
+### Execution and production blockers
+
+**Not a live penetration test.** Supabase connector calls currently fail with
+`link_id must identify an eligible linked account`. CI security tests inspect
+source and exercise pure client-side functions, not a production Postgres
+connection. Edge TypeScript functions have not been deployed/tested in
+Doorline's Supabase environment, and browser GPS has not been tested with real
+user accounts.
+
+Before production launch, run migrations 0019 and 0020 in order on a backed-up
+Doorline database, execute `doorline_smoke_readonly.sql` and examine failures,
+deploy both Edge Functions, and test authenticated browser calls including
+OPTIONS preflight, active/deactivated agents and two-company RLS isolation.
+Only then consider merging PR #5 or promoting a Vercel deployment.
