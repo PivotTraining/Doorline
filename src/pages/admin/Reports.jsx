@@ -3,6 +3,7 @@ import { useStore, getState, publishReportBatch, deleteReportBatch } from "../..
 import { repCode } from "../../lib/campaigns.js";
 import { parseCSV, downloadCSV } from "../../lib/csv.js";
 import { segmentReport } from "../../lib/reports.js";
+import { likelyAmountColumns } from "../../lib/payEarnings.js";
 
 export default function Reports() {
   useStore();
@@ -13,6 +14,9 @@ export default function Reports() {
   const [overrides, setOverrides] = useState({}); // rawValue -> repId
   const [err, setErr] = useState("");
   const [published, setPublished] = useState("");
+  // Which column holds what the rep was paid. Without it the report is
+  // still publishable and downloadable; it just cannot feed earnings.
+  const [amountCol, setAmountCol] = useState("");
 
   const onFile = async (e) => {
     const f = e.target.files?.[0];
@@ -26,6 +30,9 @@ export default function Reports() {
       // best-guess the ID column by header name
       const guess = headers.find((h) => /\b(id|agent|rep|code)\b/i.test(h));
       setIdCol(guess || headers[0]);
+      // and the money column, so earnings work without hunting for it
+      const money = likelyAmountColumns(headers)[0];
+      setAmountCol(/commission|payout|earnings|earned|amount|pay|total|net/i.test(money || "") ? money : "");
     } catch {
       setErr("Couldn't read that file — make sure it's a .csv export.");
     }
@@ -46,7 +53,7 @@ export default function Reports() {
     const assigned = [];
     for (const [repId, rows] of seg.byRep.entries()) for (const data of rows) assigned.push({ repId, data });
     if (!assigned.length) { setErr("Nothing is assigned to a rep yet."); return; }
-    const { count } = publishReportBatch({ name: file.name.replace(/\.csv$/i, ""), cols: file.headers }, assigned);
+    const { count } = publishReportBatch({ name: file.name.replace(/\.csv$/i, ""), cols: file.headers, amountCol }, assigned);
     setPublished(`Published ${count} rows to ${seg.byRep.size} ${seg.byRep.size === 1 ? "rep" : "reps"}. They can see them under My Reports.`);
     setTimeout(() => setPublished(""), 6000);
   };
@@ -98,6 +105,18 @@ export default function Reports() {
               <div>
                 <b>Publish to reps</b>
                 <p className="muted" style={{ margin: "2px 0 0", fontSize: 13 }}>Send each rep their {seg.counts.matchedRows} matched rows so they can see + download their own slice under My Reports.</p>
+                <label className="field" style={{ margin: "8px 0 0", maxWidth: 320 }}>
+                  <span>Which column is what they were paid?</span>
+                  <select className="select" value={amountCol} onChange={(e) => setAmountCol(e.target.value)}>
+                    <option value="">— Don't track earnings from this report —</option>
+                    {likelyAmountColumns(file.headers).map((h) => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                  <small className="muted">
+                    {amountCol
+                      ? "This feeds each agent's earnings and year-to-date totals on Commissions."
+                      : "Leave unset and this report is still downloadable — it just won't count toward earnings."}
+                  </small>
+                </label>
                 {published && <p style={{ color: "var(--green)", fontSize: 13, margin: "6px 0 0" }}>{published}</p>}
               </div>
               <button className="btn primary" onClick={publish}>📤 Publish to reps</button>

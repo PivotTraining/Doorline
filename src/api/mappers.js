@@ -80,9 +80,13 @@ export const officeFromRow = (r) => ({ id: r.id, name: r.name });
 export const reportBatchToRow = (b, orgId) => ({
   id: b.id, org_id: orgId, name: b.name, cols: b.cols || [], uploaded_by: b.uploadedBy || null,
   created_at: new Date(b.ts || Date.now()).toISOString(),
+  // amount_col arrives with 0022. Emitted only when set, so this client can
+  // still publish reports to a database that predates it.
+  ...(b.amountCol ? { amount_col: b.amountCol } : {}),
 });
 export const reportBatchFromRow = (r) => ({
   id: r.id, name: r.name, cols: r.cols || [], uploadedBy: r.uploaded_by || null,
+  amountCol: r.amount_col || null,
   ts: r.created_at ? Date.parse(r.created_at) : Date.now(),
 });
 export const reportRowToRow = (r, orgId) => ({

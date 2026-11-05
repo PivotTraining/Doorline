@@ -565,8 +565,9 @@ export function updateDeal(id, patch) { const d = state.deals.find((x) => x.id =
 // ---------- master reports published to reps ----------
 // An admin uploads a master report, maps rows to reps, and publishes: each
 // assigned row becomes a report_row the rep can see + download in-app.
-export function publishReportBatch({ name, cols }, assignedRows) {
-  const batch = { id: uid(), name: name || "Report", cols: cols || [], uploadedBy: state.sessionId, ts: Date.now() };
+export function publishReportBatch({ name, cols, amountCol }, assignedRows) {
+  const batch = { id: uid(), name: name || "Report", cols: cols || [], amountCol: amountCol || null,
+    uploadedBy: state.sessionId, ts: Date.now() };
   const rows = assignedRows.map((r) => ({ id: uid(), batchId: batch.id, repId: r.repId, data: r.data }));
   state.reportBatches.unshift(batch);
   state.reportRows.push(...rows);

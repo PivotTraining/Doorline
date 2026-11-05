@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useStore, getState, activeCampaigns } from "../../store";
 import { repCode } from "../../lib/campaigns.js";
 import { repEarnings, campaignByName, dealCommission } from "../../lib/commission.js";
+import { payEarnings } from "../../lib/payEarnings.js";
 import { downloadCSV } from "../../lib/csv.js";
 import Modal from "../../components/Modal.jsx";
 
@@ -24,9 +25,27 @@ export default function Commissions() {
 
   const anyCommission = campaigns.some((c) => Number(c.commissionAmount) > 0);
 
+  // What the uploaded pay reports actually say each agent was paid. This is
+  // separate from the projection above: that one is what the campaign's
+  // commission rule implies they should earn from the deals they logged,
+  // this is what payroll reported. They will disagree, and seeing the gap
+  // is the point, so neither replaces the other.
+  // Not affected by the range selector -- pay reports carry their own
+  // dates, and "this week" of deals has nothing to do with when a report
+  // was published.
+  const paid = useMemo(
+    () => payEarnings(state.reportBatches, state.reportRows),
+    [state.reportBatches, state.reportRows]
+  );
+  const paidTotals = [...paid.values()].reduce(
+    (a, e) => ({ paid: a.paid + e.paid, ytd: a.ytd + e.ytd }), { paid: 0, ytd: 0 });
+  const unmapped = (state.reportBatches || []).filter((b) => !b.amountCol).length;
+
   const exportCSV = () => downloadCSV(`commissions-${range}.csv`, reps.map((r) => {
     const e = earnings.get(r.id) || { deals: 0, value: 0, commission: 0 };
-    return { Rep: r.name, "Rep ID": repCode(r.id), Deals: e.deals, "Contract value": e.value.toFixed(2), "Commission owed": e.commission.toFixed(2) };
+    const p = paid.get(r.id) || { paid: 0, ytd: 0 };
+    return { Rep: r.name, "Rep ID": repCode(r.id), Deals: e.deals, "Contract value": e.value.toFixed(2),
+      "Commission projected": e.commission.toFixed(2), "Paid (reports)": p.paid.toFixed(2), "Paid YTD": p.ytd.toFixed(2) };
   }));
 
   return (
@@ -34,7 +53,11 @@ export default function Commissions() {
       <div className="page-head">
         <div>
           <h1>Commissions</h1>
-          <p>What each rep has earned, based on the commission you set per campaign. Track it here and pay however you already do — nothing moves money automatically.</p>
+          <p>
+            Company revenue and what each agent has earned. <b>Paid</b> comes from the pay reports you upload
+            under Reports; <b>projected</b> is what the campaign's commission rule implies from the deals they
+            logged. Nothing moves money automatically.
+          </p>
         </div>
         <div className="row">
           <select className="select" style={{ width: "auto" }} value={range} onChange={(e) => setRange(e.target.value)}>
@@ -50,27 +73,49 @@ export default function Commissions() {
         </div>
       )}
 
-      <div className="cards grid-4" style={{ marginBottom: 18 }}>
+      {unmapped > 0 && (
+        <div className="card" style={{ marginBottom: 14, borderColor: "var(--amber)" }}>
+          <p style={{ margin: 0, fontSize: 14 }}>
+            📄 {unmapped} published {unmapped === 1 ? "report has" : "reports have"} no pay column set, so {unmapped === 1 ? "it isn't" : "they aren't"} counted
+            in the paid totals below. Re-publish with “Which column is what they were paid?” set, under <b>Reports</b>.
+          </p>
+        </div>
+      )}
+
+      <div className="cards grid-5" style={{ marginBottom: 18 }}>
         <div className="card stat"><div className="n">{grand.deals}</div><div className="l">Deals ({RANGES[range].toLowerCase()})</div></div>
-        <div className="card stat"><div className="n">{money(grand.value)}</div><div className="l">Contract value</div></div>
-        <div className="card stat"><div className="n" style={{ color: "var(--green)" }}>{money(grand.commission)}</div><div className="l">Total commission owed</div></div>
-        <div className="card stat"><div className="n">{reps.filter((r) => (earnings.get(r.id)?.commission || 0) > 0).length}</div><div className="l">Reps with earnings</div></div>
+        <div className="card stat"><div className="n">{money(grand.value)}</div><div className="l">Company revenue</div></div>
+        <div className="card stat"><div className="n">{money(grand.commission)}</div><div className="l">Commission projected</div></div>
+        <div className="card stat"><div className="n" style={{ color: "var(--green)" }}>{money(paidTotals.paid)}</div><div className="l">Paid (from reports)</div></div>
+        <div className="card stat"><div className="n" style={{ color: "var(--green)" }}>{money(paidTotals.ytd)}</div><div className="l">Paid year to date</div></div>
       </div>
 
       <div className="card">
         <div className="table-scroll">
           <table className="tbl">
-            <thead><tr><th>Rep</th><th>Rep ID</th><th style={{ textAlign: "center" }}>Deals</th><th style={{ textAlign: "right" }}>Contract value</th><th style={{ textAlign: "right" }}>Commission owed</th><th></th></tr></thead>
+            <thead><tr>
+              <th>Rep</th><th>Rep ID</th>
+              <th style={{ textAlign: "center" }}>Deals</th>
+              <th style={{ textAlign: "right" }}>Contract value</th>
+              <th style={{ textAlign: "right" }}>Commission projected</th>
+              <th style={{ textAlign: "right" }}>Paid (reports)</th>
+              <th style={{ textAlign: "right" }}>Paid YTD</th>
+              <th></th>
+            </tr></thead>
             <tbody>
               {reps.map((r) => {
                 const e = earnings.get(r.id) || { deals: 0, value: 0, commission: 0 };
+                const p = paid.get(r.id) || { paid: 0, ytd: 0 };
+                const any = e.deals || p.paid;
                 return (
-                  <tr key={r.id} className="rep-row" style={{ opacity: e.deals ? 1 : 0.5 }} onClick={() => e.deals && setOpenRep(r)}>
+                  <tr key={r.id} className="rep-row" style={{ opacity: any ? 1 : 0.5 }} onClick={() => e.deals && setOpenRep(r)}>
                     <td><span className={e.deals ? "rep-link" : undefined}>{r.name}</span></td>
                     <td className="muted" style={{ fontFamily: "monospace" }}>{repCode(r.id)}</td>
                     <td style={{ textAlign: "center" }}>{e.deals}</td>
                     <td style={{ textAlign: "right" }}>{money(e.value)}</td>
-                    <td style={{ textAlign: "right", color: "var(--green)", fontWeight: 600 }}>{money(e.commission)}</td>
+                    <td style={{ textAlign: "right" }}>{money(e.commission)}</td>
+                    <td style={{ textAlign: "right", color: p.paid ? "var(--green)" : undefined, fontWeight: p.paid ? 600 : 400 }}>{money(p.paid)}</td>
+                    <td style={{ textAlign: "right", color: p.ytd ? "var(--green)" : undefined }}>{money(p.ytd)}</td>
                     <td className="muted" style={{ textAlign: "right", fontSize: 12 }}>{e.deals ? "Details →" : ""}</td>
                   </tr>
                 );
@@ -81,7 +126,9 @@ export default function Commissions() {
                 <td>Total</td><td></td>
                 <td style={{ textAlign: "center" }}>{grand.deals}</td>
                 <td style={{ textAlign: "right" }}>{money(grand.value)}</td>
-                <td style={{ textAlign: "right", color: "var(--green)" }}>{money(grand.commission)}</td>
+                <td style={{ textAlign: "right" }}>{money(grand.commission)}</td>
+                <td style={{ textAlign: "right", color: "var(--green)" }}>{money(paidTotals.paid)}</td>
+                <td style={{ textAlign: "right", color: "var(--green)" }}>{money(paidTotals.ytd)}</td>
                 <td></td>
               </tr>
             </tfoot>
