@@ -43,7 +43,36 @@ const FALLBACK_PRODUCTS = ["Other"];
 // Campaigns are stored (rich objects) in org.products; activeCampaigns()
 // normalizes legacy string entries too. The deal picker only needs names,
 // so activeProducts() derives those from the campaign list.
-export function activeCampaigns() { return normalizeCampaigns(state.org.products && state.org.products.length ? state.org.products : FALLBACK_PRODUCTS); }
+// Campaigns live in the `campaigns` table once migration 0021 has run. Until
+// then -- and always in demo mode -- they are the legacy jsonb array on
+// org.products. campaignsAvailable records which world we are in, so this
+// client works against a database on either side of that migration.
+export function activeCampaigns() {
+  if (state.campaignsAvailable) return normalizeCampaigns(state.campaigns || []);
+  return normalizeCampaigns(state.org.products && state.org.products.length ? state.org.products : FALLBACK_PRODUCTS);
+}
+// Which campaigns a given agent is onboarded with, and the reverse.
+export function campaignsForRep(repId) {
+  if (!state.campaignsAvailable) return [];
+  const ids = new Set((state.campaignMembers || []).filter((m) => m.repId === repId).map((m) => m.campaignId));
+  return activeCampaigns().filter((c) => ids.has(c.id));
+}
+export function repsForCampaign(campaignId) {
+  const ids = new Set((state.campaignMembers || []).filter((m) => m.campaignId === campaignId).map((m) => m.repId));
+  return state.users.filter((u) => ids.has(u.id));
+}
+export function assignCampaign(campaignId, repId) {
+  const id = `${campaignId}:${repId}`;
+  if ((state.campaignMembers || []).some((m) => m.id === id)) return;
+  const m = { id, campaignId, repId };
+  state.campaignMembers = [...(state.campaignMembers || []), m];
+  emit(); push("campaign_members", m);
+}
+export function unassignCampaign(campaignId, repId) {
+  const id = `${campaignId}:${repId}`;
+  state.campaignMembers = (state.campaignMembers || []).filter((m) => m.id !== id);
+  emit(); pushDel("campaign_members", id);
+}
 export function activeProducts() {
   const names = activeCampaigns().filter((c) => c.active && c.name).map((c) => c.name);
   return names.length ? names : FALLBACK_PRODUCTS;
@@ -224,7 +253,8 @@ function blankLive() {
     org: { name: "Doorline", logo: null, homeZip: null, homeLat: null, homeLng: null },
     users: [], homes: [], deals: [], posts: [], territories: [], tracks: {},
     presence: {}, streetRows: [], submittedDays: {},
-    reportBatches: [], reportRows: [], sessionId: null,
+    reportBatches: [], reportRows: [], campaigns: [], campaignMembers: [], offices: [],
+    campaignsAvailable: false, sessionId: null,
   };
 }
 let state = hydrate(DEMO ? load() : blankLive()) || seed();
@@ -535,8 +565,9 @@ export function updateDeal(id, patch) { const d = state.deals.find((x) => x.id =
 // ---------- master reports published to reps ----------
 // An admin uploads a master report, maps rows to reps, and publishes: each
 // assigned row becomes a report_row the rep can see + download in-app.
-export function publishReportBatch({ name, cols }, assignedRows) {
-  const batch = { id: uid(), name: name || "Report", cols: cols || [], uploadedBy: state.sessionId, ts: Date.now() };
+export function publishReportBatch({ name, cols, amountCol }, assignedRows) {
+  const batch = { id: uid(), name: name || "Report", cols: cols || [], amountCol: amountCol || null,
+    uploadedBy: state.sessionId, ts: Date.now() };
   const rows = assignedRows.map((r) => ({ id: uid(), batchId: batch.id, repId: r.repId, data: r.data }));
   state.reportBatches.unshift(batch);
   state.reportRows.push(...rows);
@@ -697,6 +728,13 @@ export function applyRemote(table, payload) {
   } else if (table === "street_rows") {
     if (ev === "DELETE") state.streetRows = state.streetRows.filter((r) => r.id !== old?.id);
     else if (row) upsert(state.streetRows, M.streetRowFromRow(row));
+  } else if (table === "campaigns") {
+    if (ev === "DELETE") state.campaigns = state.campaigns.filter((c) => c.id !== old?.id);
+    else if (row) upsert(state.campaigns, M.campaignFromRow(row));
+  } else if (table === "campaign_members") {
+    const key = (r) => `${r.campaign_id}:${r.rep_id}`;
+    if (ev === "DELETE") state.campaignMembers = (state.campaignMembers || []).filter((m) => m.id !== key(old || {}));
+    else if (row) upsert(state.campaignMembers, M.campaignMemberFromRow(row));
   } else if (table === "territories") {
     if (ev === "DELETE") state.territories = state.territories.filter((t) => t.id !== old?.id);
     else if (row) upsert(state.territories, M.territoryFromRow(row));

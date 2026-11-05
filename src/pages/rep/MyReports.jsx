@@ -1,9 +1,21 @@
 import { useStore, repReportRows } from "../../store";
 import { downloadCSV } from "../../lib/csv.js";
+import { payEarnings, parseMoney } from "../../lib/payEarnings.js";
+
+const money = (n) => "$" + (Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function MyReports({ user }) {
   useStore();
   const groups = repReportRows(user.id);
+
+  // Earnings come from the same reports shown below, so every figure here
+  // is backed by rows this agent can open and download themselves.
+  const mine = payEarnings(
+    groups.map((g) => g.batch),
+    groups.flatMap((g) => g.rows.map((r) => ({ ...r, repId: user.id }))),
+  ).get(user.id) || { paid: 0, ytd: 0, rows: 0 };
+  const batchTotal = (batch, rows) =>
+    batch.amountCol ? rows.reduce((a, r) => a + parseMoney(r.data?.[batch.amountCol]), 0) : null;
 
   const dl = (batch, rows) => downloadCSV(
     `${batch.name.replace(/\s+/g, "-")}-mine.csv`,
@@ -14,10 +26,23 @@ export default function MyReports({ user }) {
     <>
       <div className="page-head">
         <div>
-          <h1>My Reports</h1>
-          <p>Reports your manager has shared with you — just your rows, tied to your rep ID.</p>
+          <h1>My Reports &amp; Earnings</h1>
+          <p>Reports your manager has shared with you — just your rows, tied to your rep ID — and what they add up to.</p>
         </div>
       </div>
+
+      {mine.paid !== 0 && (
+        <div className="cards grid-2" style={{ marginBottom: 16 }}>
+          <div className="card stat">
+            <div className="n" style={{ color: "var(--green)" }}>{money(mine.ytd)}</div>
+            <div className="l">Earned year to date</div>
+          </div>
+          <div className="card stat">
+            <div className="n">{money(mine.paid)}</div>
+            <div className="l">Earned all time · {mine.rows} line{mine.rows === 1 ? "" : "s"}</div>
+          </div>
+        </div>
+      )}
 
       {groups.length === 0 ? (
         <div className="card"><p className="muted" style={{ margin: 0 }}>Nothing shared yet. When your manager publishes a report, your numbers show up here.</p></div>
@@ -29,7 +54,12 @@ export default function MyReports({ user }) {
               <div className="row between" style={{ flexWrap: "wrap", gap: 8 }}>
                 <div>
                   <h3 style={{ margin: 0 }}>{batch.name}</h3>
-                  <span className="muted" style={{ fontSize: 13 }}>{rows.length} row{rows.length === 1 ? "" : "s"} · shared {new Date(batch.ts).toLocaleDateString([], { month: "short", day: "numeric" })}</span>
+                  <span className="muted" style={{ fontSize: 13 }}>
+                    {rows.length} row{rows.length === 1 ? "" : "s"} · shared {new Date(batch.ts).toLocaleDateString([], { month: "short", day: "numeric" })}
+                    {batchTotal(batch, rows) != null && (
+                      <> · <b style={{ color: "var(--green)" }}>{money(batchTotal(batch, rows))}</b></>
+                    )}
+                  </span>
                 </div>
                 <button className="btn" onClick={() => dl(batch, rows)}>⤓ Download my rows</button>
               </div>

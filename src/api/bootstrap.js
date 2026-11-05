@@ -70,7 +70,7 @@ export async function initLive() {
     const reports = await S.loadReports();
     if (reports) loadSnapshot(overlayPending(reports, pendingChanges()), profile.id);
     lastResync = Date.now();
-    unsub = subscribeOrg(profile.org_id, applyRemote);
+    unsub = subscribeOrg(profile.org_id, applyRemote, { campaigns: !!snap.campaignsAvailable });
     stopFlush = startLocationFlush();
     stopWriteFlush = startWriteFlush();
     stopResync = startResync();

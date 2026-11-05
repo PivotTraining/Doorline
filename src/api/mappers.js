@@ -61,19 +61,32 @@ export const profileToRow = (u, orgId) => ({
   id: u.id, org_id: orgId, full_name: u.name, email: u.email,
   role: u.role, status: u.status, territory: u.territory, seat_price_cents: u.plan || 0,
   timezone: u.timezone || null, home_zip: u.homeZip || null, home_lat: u.homeLat ?? null, home_lng: u.homeLng ?? null,
+  manager_id: u.managerId || null,
+  // office_id arrives with migration 0021. Emitted only when set, so this
+  // client can still write profiles to a database that predates it --
+  // PostgREST rejects the whole row for one unknown column.
+  ...(u.officeId ? { office_id: u.officeId } : {}),
 });
 export const profileFromRow = (r) => ({
   id: r.id, name: r.full_name, email: r.email, role: r.role, status: r.status,
   territory: r.territory || "—", plan: r.seat_price_cents || 0,
   timezone: r.timezone || null, homeZip: r.home_zip || null, homeLat: r.home_lat ?? null, homeLng: r.home_lng ?? null,
+  managerId: r.manager_id || null, officeId: r.office_id || null,
 });
+
+export const officeToRow = (o, orgId) => ({ id: o.id, org_id: orgId, name: o.name });
+export const officeFromRow = (r) => ({ id: r.id, name: r.name });
 
 export const reportBatchToRow = (b, orgId) => ({
   id: b.id, org_id: orgId, name: b.name, cols: b.cols || [], uploaded_by: b.uploadedBy || null,
   created_at: new Date(b.ts || Date.now()).toISOString(),
+  // amount_col arrives with 0022. Emitted only when set, so this client can
+  // still publish reports to a database that predates it.
+  ...(b.amountCol ? { amount_col: b.amountCol } : {}),
 });
 export const reportBatchFromRow = (r) => ({
   id: r.id, name: r.name, cols: r.cols || [], uploadedBy: r.uploaded_by || null,
+  amountCol: r.amount_col || null,
   ts: r.created_at ? Date.parse(r.created_at) : Date.now(),
 });
 export const reportRowToRow = (r, orgId) => ({
@@ -114,3 +127,52 @@ export function fromPolygon(geo) {
   if (!geo || geo.type !== "Polygon") return [];
   return (geo.coordinates?.[0] || []).map(([lng, lat]) => [lat, lng]);
 }
+
+// ---------- campaigns (0021) ----------
+// commission_amount is numeric, not cents: the value means dollars when the
+// type is flat and a percentage when it is percent, so a rate like 7.5 has
+// to survive intact.
+export const campaignToRow = (c, orgId) => ({
+  id: c.id, org_id: orgId, name: c.name,
+  description: c.description || "", promo: c.promo || "",
+  enrollment_url: c.enrollmentUrl || "",
+  active: c.active !== false,
+  commission_type: c.commissionType === "percent" ? "percent" : "flat",
+  commission_amount: Number(c.commissionAmount) || 0,
+  ...(c.legacyKey ? { legacy_key: c.legacyKey } : {}),
+});
+export const campaignFromRow = (r) => ({
+  id: r.id, legacyKey: r.legacy_key || null, name: r.name,
+  description: r.description || "", promo: r.promo || "",
+  enrollmentUrl: r.enrollment_url || "", active: r.active !== false,
+  commissionType: r.commission_type === "percent" ? "percent" : "flat",
+  commissionAmount: Number(r.commission_amount) || 0,
+});
+
+// Membership has a composite key (campaign_id, rep_id) rather than an id,
+// so the store carries a synthetic one to keep list handling uniform.
+export const memberKey = (campaignId, repId) => `${campaignId}:${repId}`;
+export const campaignMemberToRow = (m, orgId) => ({
+  campaign_id: m.campaignId, rep_id: m.repId, org_id: orgId,
+});
+export const campaignMemberFromRow = (r) => ({
+  id: memberKey(r.campaign_id, r.rep_id), campaignId: r.campaign_id, repId: r.rep_id,
+});
+
+export const campaignDocFromRow = (r) => ({
+  id: r.id, campaignId: r.campaign_id, name: r.name, path: r.storage_path,
+  mime: r.mime_type || "", size: r.size_bytes ?? null, uploadedBy: r.uploaded_by || null,
+  ts: r.created_at ? Date.parse(r.created_at) : Date.now(),
+});
+
+// ---------- billing ledger (0021) ----------
+export const chargeFromRow = (r) => ({
+  id: r.id, description: r.description, cents: Number(r.amount_cents) || 0,
+  periodStart: r.period_start || "", periodEnd: r.period_end || "",
+  dueDate: r.due_date || "", ts: r.created_at ? Date.parse(r.created_at) : Date.now(),
+});
+export const paymentFromRow = (r) => ({
+  id: r.id, cents: Number(r.amount_cents) || 0, method: r.method || "other",
+  reference: r.reference || "", receiptNumber: r.receipt_number,
+  paidAt: r.paid_at ? Date.parse(r.paid_at) : Date.now(),
+});

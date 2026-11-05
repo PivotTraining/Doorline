@@ -6,12 +6,19 @@
 import { supabase } from "../supabaseClient";
 import * as M from "./mappers";
 import { getCtx } from "./context";
+import { optionalRead } from "../lib/optionalRead.js";
 
 const org = () => getCtx().orgId;
 
+// Tables introduced by migration 0021 go through optionalRead(), which
+// degrades a missing table to "no rows" plus an `absent` flag instead of
+// failing the whole hydrate. See src/lib/optionalRead.js.
+const optional = optionalRead;
+
 // Initial hydrate: one round of reads → a store-shaped snapshot.
 export async function loadAll() {
-  const [o, profiles, homes, deals, posts, territories, street, presence, closeouts] = await Promise.all([
+  const [o, profiles, homes, deals, posts, territories, street, presence, closeouts,
+         campaigns, campaignMembers, offices] = await Promise.all([
     supabase.from("organizations").select("*").limit(1).single(),
     supabase.from("profiles").select("*"),
     supabase.from("homes").select("*"),
@@ -21,6 +28,9 @@ export async function loadAll() {
     supabase.from("street_rows").select("*").order("slot", { nullsFirst: false }).order("created_at"),
     supabase.from("agent_presence").select("*"),
     supabase.from("daily_submissions").select("*"),
+    optional(supabase.from("campaigns").select("*")),
+    optional(supabase.from("campaign_members").select("*")),
+    optional(supabase.from("offices").select("*")),
   ]);
   // A missing migration, inaccessible table, or RLS error is NOT an empty
   // company's activity. Never replace a rep's pending local work with a
@@ -40,6 +50,10 @@ export async function loadAll() {
     posts: (posts.data || []).map((r) => M.postFromRow({ ...r, author_name: r.profiles?.full_name })),
     territories: (territories.data || []).map(M.territoryFromRow),
     streetRows: (street.data || []).map(M.streetRowFromRow),
+    campaignsAvailable: !campaigns.absent,
+    offices: (offices.data || []).map(M.officeFromRow),
+    campaigns: (campaigns.data || []).map(M.campaignFromRow),
+    campaignMembers: (campaignMembers.data || []).map(M.campaignMemberFromRow),
     presence: Object.fromEntries((presence.data || []).map((p) => [p.rep_id, {
       online: p.online, since: p.started_at ? Date.parse(p.started_at) : null,
       lastSeen: Date.parse(p.last_seen), lat: p.lat, lng: p.lng, consent: undefined,
@@ -122,6 +136,17 @@ export async function loadReports() {
     };
   } catch { return null; }
 }
+export const upsertOffice    = (o)      => supabase.from("offices").upsert(M.officeToRow(o, org()));
+export const deleteOffice    = (id)     => supabase.from("offices").delete().eq("id", id);
+export const upsertCampaign  = (c)      => supabase.from("campaigns").upsert(M.campaignToRow(c, org()));
+export const deleteCampaign  = (id)     => supabase.from("campaigns").delete().eq("id", id);
+export const upsertCampaignMember = (m) => supabase.from("campaign_members")
+  .upsert(M.campaignMemberToRow(m, org()), { onConflict: "campaign_id,rep_id" });
+export const deleteCampaignMember = (id) => {
+  const [campaignId, repId] = String(id).split(":");
+  return supabase.from("campaign_members").delete().eq("campaign_id", campaignId).eq("rep_id", repId);
+};
+
 export const upsertOrg       = (o)      => supabase.from("organizations").update({
   name: o.name, logo_path: o.logo, followup: o.followup, products: o.products,
   home_zip: o.homeZip || null, home_lat: o.homeLat ?? null, home_lng: o.homeLng ?? null,
@@ -131,6 +156,35 @@ export const upsertOrg       = (o)      => supabase.from("organizations").update
 // auth.users row a profile must reference, so this goes through a service-
 // role edge function that makes the auth user + profile atomically and
 // returns a temporary password for the admin to hand off.
+// Change a teammate's sign-in email or reset their password. Same
+// service-role reasoning as createTeamMember: the browser cannot touch
+// another user's auth record.
+export const updateTeamMember = async (payload) => {
+  const url = import.meta.env.VITE_SUPABASE_URL;
+  const { data } = await supabase.auth.getSession();
+  const res = await fetch(`${url}/functions/v1/update-team-member`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${data?.session?.access_token ?? ""}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const d = String(body.detail || body.error || "");
+    if (/registered|already exists|duplicate/i.test(d)) return { error: "Another account already uses that email." };
+    if (body.error === "forbidden_owner") return { error: "Only the owner can change the owner's sign-in details." };
+    if (body.error === "forbidden") return { error: "Only an owner or admin can change sign-in details." };
+    if (body.error === "not_found") return { error: "That person is not on your team." };
+    if (body.error === "bad_email") return { error: "That doesn't look like a valid email address." };
+    if (body.error === "weak_password") return { error: "Password must be at least 6 characters." };
+    return { error: d || "Could not update this user." };
+  }
+  return body; // { id, email, tempPassword? }
+};
+
 export const createTeamMember = async (payload) => {
   const url = import.meta.env.VITE_SUPABASE_URL;
   const { data } = await supabase.auth.getSession();
@@ -159,3 +213,96 @@ export const assignTerritory = (tid, repId)   => supabase.rpc("assign_territory"
 export const setConsentRpc   = (granted)      => supabase.rpc("set_consent", { granted });
 export const leaderboard     = ()             => supabase.rpc("leaderboard", { p_org: org() });
 export const accountability  = (day)          => supabase.rpc("rep_accountability", { p_org: org(), p_day: day });
+
+// ---------- campaign documents (0021 + the private campaign-docs bucket) ----------
+// Metadata lives in a table, bytes in a private bucket at
+// <org_id>/<campaign_id>/<file>. The path layout is not cosmetic: the
+// Storage policies read the org and campaign out of it to decide who may
+// read an object, so it must stay exactly this shape.
+const DOC_BUCKET = "campaign-docs";
+
+export const listCampaignDocs = async (campaignId) => {
+  const r = await supabase.from("campaign_documents").select("*")
+    .eq("campaign_id", campaignId).order("created_at", { ascending: false });
+  if (r.error) return { error: r.error.message, docs: [] };
+  return { docs: (r.data || []).map(M.campaignDocFromRow) };
+};
+
+export const uploadCampaignDoc = async (campaignId, file) => {
+  const orgId = org();
+  const safe = (file.name || "file").replace(/[^\w.\-]+/g, "_").slice(0, 120);
+  const path = `${orgId}/${campaignId}/${Date.now()}-${safe}`;
+  const up = await supabase.storage.from(DOC_BUCKET)
+    .upload(path, file, { upsert: false, contentType: file.type || undefined });
+  if (up.error) return { error: up.error.message };
+  const ins = await supabase.from("campaign_documents").insert({
+    org_id: orgId, campaign_id: campaignId, name: file.name || safe,
+    storage_path: path, mime_type: file.type || null, size_bytes: file.size ?? null,
+    uploaded_by: getCtx().repId || null,
+  }).select("*").single();
+  if (ins.error) {
+    // Never leave bytes in the bucket with no row pointing at them: nothing
+    // would ever list or delete them again.
+    await supabase.storage.from(DOC_BUCKET).remove([path]).catch(() => {});
+    return { error: ins.error.message };
+  }
+  return { doc: M.campaignDocFromRow(ins.data) };
+};
+
+// The bucket is private, so a download is a short-lived signed URL rather
+// than a public link -- knowing a path grants nothing on its own.
+export const campaignDocUrl = async (path) => {
+  const r = await supabase.storage.from(DOC_BUCKET).createSignedUrl(path, 120);
+  return r.error ? { error: r.error.message } : { url: r.data.signedUrl };
+};
+
+export const deleteCampaignDoc = async (doc) => {
+  const d = await supabase.from("campaign_documents").delete().eq("id", doc.id);
+  if (d.error) return { error: d.error.message };
+  // Row first: if the object delete fails the file is orphaned but
+  // unreachable, which is better than a row pointing at nothing.
+  await supabase.storage.from(DOC_BUCKET).remove([doc.path]);
+  return {};
+};
+
+// ---------- billing ledger (0021) ----------
+// Owner/admin only by RLS. Fetched on demand rather than hydrated: reps
+// and managers cannot read these at all, so putting them in the shared
+// snapshot would mean every agent's sign-in carrying a read that is
+// guaranteed to be denied.
+export const loadBilling = async () => {
+  const [charges, payments] = await Promise.all([
+    optionalRead(supabase.from("billing_charges").select("*").order("created_at", { ascending: false })),
+    optionalRead(supabase.from("billing_payments").select("*").order("paid_at", { ascending: false })),
+  ]);
+  return {
+    absent: !!(charges.absent || payments.absent),
+    charges: (charges.data || []).map(M.chargeFromRow),
+    payments: (payments.data || []).map(M.paymentFromRow),
+  };
+};
+
+export const addBillingCharge = async (c) => {
+  const r = await supabase.from("billing_charges").insert({
+    org_id: org(), description: c.description, amount_cents: c.cents,
+    period_start: c.periodStart || null, period_end: c.periodEnd || null,
+    due_date: c.dueDate || null, created_by: getCtx().repId || null,
+  }).select("*").single();
+  return r.error ? { error: r.error.message } : { charge: M.chargeFromRow(r.data) };
+};
+
+export const addBillingPayment = async (p) => {
+  const r = await supabase.from("billing_payments").insert({
+    org_id: org(), amount_cents: p.cents, method: p.method || "other",
+    reference: p.reference || null, receipt_number: p.receiptNumber,
+    paid_at: p.paidAt || new Date().toISOString(), recorded_by: getCtx().repId || null,
+  }).select("*").single();
+  if (r.error) {
+    // The unique (org_id, receipt_number) index is what guarantees two
+    // payments can never share a receipt number, even if two admins record
+    // one at the same moment.
+    if (/duplicate|unique/i.test(r.error.message)) return { error: "That receipt number is already used. Try again." };
+    return { error: r.error.message };
+  }
+  return { payment: M.paymentFromRow(r.data) };
+};

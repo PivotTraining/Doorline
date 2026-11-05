@@ -13,6 +13,8 @@ import { segmentReport, buildRepIndex } from "../src/lib/reports.js";
 import { dealCommission, repEarnings, campaignByName } from "../src/lib/commission.js";
 import { normalizeCampaign as _nc } from "../src/lib/campaigns.js";
 import { localDay, localDayInTZ } from "../src/lib/date.js";
+import { optionalRead } from "../src/lib/optionalRead.js";
+import { parseMoney, payEarnings, likelyAmountColumns } from "../src/lib/payEarnings.js";
 
 test("home round-trips through row mapping", () => {
   const h = { id: "h1", repId: "r1", addr: "1 Maple", lat: 33.7, lng: -84.3, status: "appt",
@@ -368,4 +370,111 @@ test("locationQueue backoff grows with consecutive failures", () => {
   assert.equal(q.nextDelay(1000), 1000); // 0 failures
   q.enqueue({ lat: 1, lng: 1 });
   return q.flush().then(() => { assert.equal(q.nextDelay(1000), 2000); }); // 1 failure → doubled
+});
+
+// ---------- campaigns (0021) ----------
+test("optionalRead degrades a missing table to no rows, not an error object", async () => {
+  // supabase-js resolves with {data,error} instead of throwing, so an
+  // un-handled missing table would otherwise be read AS data.
+  const missing = await optionalRead(Promise.resolve({ data: null, error: { message: 'relation "campaigns" does not exist' } }));
+  assert.deepEqual(missing.data, []);
+  assert.equal(missing.absent, true);
+  assert.equal(missing.error, null);
+});
+
+test("optionalRead degrades a rejected read too", async () => {
+  const thrown = await optionalRead(Promise.reject(new Error("network")));
+  assert.deepEqual(thrown.data, []);
+  assert.equal(thrown.absent, true);
+});
+
+test("optionalRead passes a healthy read through untouched", async () => {
+  const ok = await optionalRead(Promise.resolve({ data: [{ id: "c1" }], error: null }));
+  assert.deepEqual(ok.data, [{ id: "c1" }]);
+  assert.ok(!ok.absent, "a healthy read must not be marked absent");
+});
+
+test("campaign round-trips, preserving a fractional percentage rate", () => {
+  const c = { id: "c1", name: "Solar Premier", description: "d", promo: "p",
+    enrollmentUrl: "https://x/{code}", active: true,
+    commissionType: "percent", commissionAmount: 7.5 };
+  const back = M.campaignFromRow(M.campaignToRow(c, "org1"));
+  assert.equal(back.name, "Solar Premier");
+  assert.equal(back.commissionType, "percent");
+  // Storing this as cents would have mangled the rate.
+  assert.equal(back.commissionAmount, 7.5);
+  assert.equal(back.active, true);
+});
+
+test("campaign row omits legacy_key when the campaign has none", () => {
+  const row = M.campaignToRow({ id: "c1", name: "New" }, "org1");
+  assert.ok(!("legacy_key" in row), "must not send a null legacy_key over a migrated value");
+  assert.equal(M.campaignToRow({ id: "c1", name: "N", legacyKey: "c0" }, "org1").legacy_key, "c0");
+});
+
+test("campaign membership carries a composite key the delete path can split", () => {
+  const m = M.campaignMemberFromRow({ campaign_id: "camp-1", rep_id: "rep-2" });
+  assert.equal(m.id, "camp-1:rep-2");
+  const [campaignId, repId] = m.id.split(":");
+  assert.equal(campaignId, "camp-1");
+  assert.equal(repId, "rep-2");
+});
+
+// ---------- earnings from pay reports ----------
+test("parseMoney copes with what spreadsheets actually contain", () => {
+  assert.equal(parseMoney("$1,234.56"), 1234.56);
+  assert.equal(parseMoney("1234.56"), 1234.56);
+  assert.equal(parseMoney(1234.56), 1234.56);
+  assert.equal(parseMoney("  $45 "), 45);
+  assert.equal(parseMoney("(45.00)"), -45);      // accounting negative
+  assert.equal(parseMoney("1.234,56"), 1234.56); // european decimal comma
+  assert.equal(parseMoney("1,50"), 1.5);         // lone comma as decimal
+  assert.equal(parseMoney("1,500"), 1500);       // lone comma as grouping
+  assert.equal(parseMoney(""), 0);
+  assert.equal(parseMoney(null), 0);
+  assert.equal(parseMoney("n/a"), 0);
+});
+
+test("payEarnings totals a rep's pay and splits out year to date", () => {
+  const thisYear = new Date(2026, 5, 1).getTime();
+  const lastYear = new Date(2025, 5, 1).getTime();
+  const batches = [
+    { id: "b1", ts: thisYear, amountCol: "Commission" },
+    { id: "b2", ts: lastYear, amountCol: "Commission" },
+  ];
+  const rows = [
+    { batchId: "b1", repId: "r1", data: { Commission: "$100.00" } },
+    { batchId: "b1", repId: "r1", data: { Commission: "$50.50" } },
+    { batchId: "b2", repId: "r1", data: { Commission: "$400.00" } },
+    { batchId: "b1", repId: "r2", data: { Commission: "$75" } },
+  ];
+  const e = payEarnings(batches, rows, new Date(2026, 8, 1).getTime());
+  assert.equal(e.get("r1").paid, 550.5);  // all time
+  assert.equal(e.get("r1").ytd, 150.5);   // this calendar year only
+  assert.equal(e.get("r1").rows, 3);
+  assert.equal(e.get("r2").paid, 75);
+});
+
+test("payEarnings ignores a batch with no amount column rather than guessing", () => {
+  const batches = [{ id: "b1", ts: Date.now(), amountCol: null }];
+  const rows = [{ batchId: "b1", repId: "r1", data: { Commission: "$100.00" } }];
+  const e = payEarnings(batches, rows);
+  assert.equal(e.size, 0, "an un-mapped batch must not invent earnings");
+});
+
+test("payEarnings skips rows not attributed to anyone", () => {
+  const batches = [{ id: "b1", ts: Date.now(), amountCol: "Amount" }];
+  const rows = [
+    { batchId: "b1", repId: null, data: { Amount: "900" } },
+    { batchId: "b1", repId: "r1", data: { Amount: "10" } },
+  ];
+  const e = payEarnings(batches, rows);
+  assert.equal(e.size, 1);
+  assert.equal(e.get("r1").paid, 10);
+});
+
+test("likelyAmountColumns puts the money column first", () => {
+  assert.equal(likelyAmountColumns(["Date", "Customer", "Commission", "Notes"])[0], "Commission");
+  assert.equal(likelyAmountColumns(["Date", "Net Pay", "Customer"])[0], "Net Pay");
+  assert.deepEqual(likelyAmountColumns([]), []);
 });
