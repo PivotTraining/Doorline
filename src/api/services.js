@@ -213,3 +213,54 @@ export const assignTerritory = (tid, repId)   => supabase.rpc("assign_territory"
 export const setConsentRpc   = (granted)      => supabase.rpc("set_consent", { granted });
 export const leaderboard     = ()             => supabase.rpc("leaderboard", { p_org: org() });
 export const accountability  = (day)          => supabase.rpc("rep_accountability", { p_org: org(), p_day: day });
+
+// ---------- campaign documents (0021 + the private campaign-docs bucket) ----------
+// Metadata lives in a table, bytes in a private bucket at
+// <org_id>/<campaign_id>/<file>. The path layout is not cosmetic: the
+// Storage policies read the org and campaign out of it to decide who may
+// read an object, so it must stay exactly this shape.
+const DOC_BUCKET = "campaign-docs";
+
+export const listCampaignDocs = async (campaignId) => {
+  const r = await supabase.from("campaign_documents").select("*")
+    .eq("campaign_id", campaignId).order("created_at", { ascending: false });
+  if (r.error) return { error: r.error.message, docs: [] };
+  return { docs: (r.data || []).map(M.campaignDocFromRow) };
+};
+
+export const uploadCampaignDoc = async (campaignId, file) => {
+  const orgId = org();
+  const safe = (file.name || "file").replace(/[^\w.\-]+/g, "_").slice(0, 120);
+  const path = `${orgId}/${campaignId}/${Date.now()}-${safe}`;
+  const up = await supabase.storage.from(DOC_BUCKET)
+    .upload(path, file, { upsert: false, contentType: file.type || undefined });
+  if (up.error) return { error: up.error.message };
+  const ins = await supabase.from("campaign_documents").insert({
+    org_id: orgId, campaign_id: campaignId, name: file.name || safe,
+    storage_path: path, mime_type: file.type || null, size_bytes: file.size ?? null,
+    uploaded_by: getCtx().repId || null,
+  }).select("*").single();
+  if (ins.error) {
+    // Never leave bytes in the bucket with no row pointing at them: nothing
+    // would ever list or delete them again.
+    await supabase.storage.from(DOC_BUCKET).remove([path]).catch(() => {});
+    return { error: ins.error.message };
+  }
+  return { doc: M.campaignDocFromRow(ins.data) };
+};
+
+// The bucket is private, so a download is a short-lived signed URL rather
+// than a public link -- knowing a path grants nothing on its own.
+export const campaignDocUrl = async (path) => {
+  const r = await supabase.storage.from(DOC_BUCKET).createSignedUrl(path, 120);
+  return r.error ? { error: r.error.message } : { url: r.data.signedUrl };
+};
+
+export const deleteCampaignDoc = async (doc) => {
+  const d = await supabase.from("campaign_documents").delete().eq("id", doc.id);
+  if (d.error) return { error: d.error.message };
+  // Row first: if the object delete fails the file is orphaned but
+  // unreachable, which is better than a row pointing at nothing.
+  await supabase.storage.from(DOC_BUCKET).remove([doc.path]);
+  return {};
+};

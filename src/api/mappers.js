@@ -154,3 +154,9 @@ export const campaignMemberToRow = (m, orgId) => ({
 export const campaignMemberFromRow = (r) => ({
   id: memberKey(r.campaign_id, r.rep_id), campaignId: r.campaign_id, repId: r.rep_id,
 });
+
+export const campaignDocFromRow = (r) => ({
+  id: r.id, campaignId: r.campaign_id, name: r.name, path: r.storage_path,
+  mime: r.mime_type || "", size: r.size_bytes ?? null, uploadedBy: r.uploaded_by || null,
+  ts: r.created_at ? Date.parse(r.created_at) : Date.now(),
+});

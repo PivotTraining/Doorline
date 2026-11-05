@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useStore, getState, activeCampaigns, setOrgCampaigns } from "../../store";
+import CampaignDocs from "../../components/CampaignDocs.jsx";
 import { personalizedEnrollUrl } from "../../lib/campaigns.js";
 import Modal from "../../components/Modal.jsx";
 
@@ -62,6 +63,7 @@ export default function Campaigns() {
                 <button className="btn sm" onClick={() => toggle(c.id)}>{c.active ? "Turn off" : "Turn on"}</button>
                 <button className="btn sm danger" onClick={() => remove(c.id)}>Remove</button>
               </div>
+              <CampaignDocs campaignId={c.id} canManage />
             </div>
           ))}
         </div>

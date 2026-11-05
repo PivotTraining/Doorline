@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useStore, activeCampaigns } from "../../store";
 import { repCode, personalizedEnrollUrl } from "../../lib/campaigns.js";
+import CampaignDocs from "../../components/CampaignDocs.jsx";
 
 function Copyable({ label, value }) {
   const [copied, setCopied] = useState(false);
@@ -58,6 +59,7 @@ export default function Campaigns({ user }) {
                     <Copyable label="⧉ Copy my link" value={link} />
                   </div>
                 )}
+                <CampaignDocs campaignId={c.id} />
               </div>
             );
           })}
