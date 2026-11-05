@@ -10,6 +10,7 @@ import Logo from "./components/Logo.jsx";
 
 import Login from "./pages/Login.jsx";
 import Landing from "./pages/Landing.jsx";
+import Home from "./pages/Home.jsx";
 import Bulletin from "./pages/Bulletin.jsx";
 // rep (light pages: static import)
 import MyDay from "./pages/rep/MyDay.jsx";
@@ -36,6 +37,7 @@ const Doors = lazy(() => import("./pages/rep/Doors.jsx"));
 const Territories = lazy(() => import("./pages/admin/Territories.jsx"));
 
 const REP_NAV = [
+  { id: "home", label: "Home", ico: "🏠", el: Home },
   { id: "myday", label: "My Day", ico: "☀️", el: MyDay },
   { id: "doors", label: "Map / Doors", ico: "📍", el: Doors },
   { id: "streetsheet", label: "Street Sheet", ico: "📝", el: StreetSheet },
@@ -48,6 +50,7 @@ const REP_NAV = [
   { id: "profile", label: "Profile", ico: "👤", el: Profile },
 ];
 const ADMIN_NAV = [
+  { id: "home", label: "Home", ico: "🏠", el: Home },
   { id: "personnel", label: "Personnel", ico: "👥", el: Personnel },
   { id: "teamstats", label: "Team Stats", ico: "📊", el: TeamStats },
   { id: "territories", label: "Territories", ico: "🧭", el: Territories },
@@ -62,7 +65,7 @@ const ADMIN_NAV = [
 
 // Remember each user's last-open tab so a reload lands back where they were
 // instead of snapping to the first nav item.
-const TAB_KEY = "doorline_tab_v1";
+const TAB_KEY = "doorline_tab_v2";
 function loadTab(userId, nav) {
   try {
     const saved = JSON.parse(localStorage.getItem(TAB_KEY) || "{}")[userId];
