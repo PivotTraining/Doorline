@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
 import { useStore, getState, DISPOS, repAccountability, repGeofenceStatus, geofenceAlerts } from "../../store";
-import FieldMap from "../../components/FieldMap.jsx";
 
 const dur = (m) => (m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`);
 const since = (ts) => { const m = Math.max(0, Math.round((Date.now() - ts) / 60000)); return m < 1 ? "just now" : `${m}m ago`; };
 
-export default function TeamMap() {
+export default function TeamStats() {
   useStore();
   const [, setClock] = useState(0);
   useEffect(() => { const timer = setInterval(() => setClock(Date.now()), 15000); return () => clearInterval(timer); }, []);
@@ -19,8 +18,8 @@ export default function TeamMap() {
     <>
       <div className="page-head">
         <div>
-          <h1>Team Map</h1>
-          <p>Every door across the org, each rep's route, and live positions. Toggle "Routes" on the map.</p>
+          <h1>Team Stats</h1>
+          <p>Production totals across the org. Live positions and route maps now live under Territory.</p>
         </div>
       </div>
 
@@ -46,8 +45,6 @@ export default function TeamMap() {
         <div className="card stat"><div className="n">{counts.appt}</div><div className="l">Appointments</div></div>
         <div className="card stat"><div className="n">{counts.sold}</div><div className="l">Sold</div></div>
       </div>
-
-      <FieldMap admin height={560} />
 
       <div className="card" style={{ marginTop: 18 }}>
         <h3>Field accountability</h3>
