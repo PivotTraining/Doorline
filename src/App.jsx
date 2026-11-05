@@ -53,7 +53,7 @@ const ADMIN_NAV = [
   { id: "home", label: "Home", ico: "🏠", el: Home },
   { id: "personnel", label: "Personnel", ico: "👥", el: Personnel },
   { id: "teamstats", label: "Team Stats", ico: "📊", el: TeamStats },
-  { id: "territories", label: "Territories", ico: "🧭", el: Territories },
+  { id: "territories", label: "Territory", ico: "🧭", el: Territories },
   { id: "campaigns", label: "Campaigns", ico: "🎯", el: Campaigns },
   { id: "reports", label: "Reports", ico: "📄", el: Reports },
   { id: "closeouts", label: "Daily Closeouts", ico: "✅", el: DailyCloseouts },

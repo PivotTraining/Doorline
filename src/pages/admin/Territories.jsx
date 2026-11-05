@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { useStore, getState, addTerritory, updateTerritory, removeTerritory, updateUser } from "../../store";
+import { useStore, getState, addTerritory, updateTerritory, removeTerritory, updateUser,
+  isAgentLive, repGeofenceStatus, activeCampaigns, sheetTotals, isDaySubmitted, SHEET_COLS } from "../../store";
 import TerritoryMap from "../../components/TerritoryMap.jsx";
 import { localDay } from "../../lib/date.js";
+import { pointInPolygon } from "../../lib/geo.js";
 
 const COLORS = ["#2e90fa", "#16a34a", "#f59e0b", "#a855f7", "#ef4444", "#14b8a6"];
 const today = () => localDay();
@@ -10,11 +12,36 @@ const initials = (name) => (name || "?").split(" ").map((w) => w[0]).slice(0, 2)
 export default function Territories() {
   useStore();
   const state = getState();
-  const reps = state.users.filter((u) => u.role === "rep");
   const repName = (id) => state.users.find((u) => u.id === id)?.name;
   const [selId, setSelId] = useState(state.territories[0]?.id || null);
   const [drawId, setDrawId] = useState(null);
+  const [campaign, setCampaign] = useState("all");
+  const [reviewRep, setReviewRep] = useState("");
+  const [reviewDate, setReviewDate] = useState(() => localDay());
   const sel = state.territories.find((t) => t.id === selId) || null;
+
+  // Assignment is scoped by campaign: pick the campaign, then pick from the
+  // agents onboarded with it rather than the whole company.
+  const campaigns = activeCampaigns();
+  const campaignsAvailable = state.campaignsAvailable;
+  const allReps = state.users.filter((u) => u.role === "rep" || u.role === "manager");
+  const reps = campaign === "all"
+    ? allReps
+    : (() => {
+        const ids = new Set((state.campaignMembers || [])
+          .filter((m) => m.campaignId === campaign).map((m) => m.repId));
+        return allReps.filter((u) => ids.has(u.id));
+      })();
+
+  // Everyone on the clock right now, with their last known position.
+  const liveAgents = allReps
+    .map((u) => {
+      const p = state.presence[u.id];
+      if (!isAgentLive(p) || p?.lat == null || p?.lng == null) return null;
+      const geo = repGeofenceStatus(u.id);
+      return { id: u.id, name: u.name, lat: p.lat, lng: p.lng, inside: geo ? geo.inside : null, zoneName: geo?.zoneName };
+    })
+    .filter(Boolean);
 
   const createNew = () => {
     const t = addTerritory({ name: "New territory", color: COLORS[state.territories.length % COLORS.length], assignedTo: "", start: today(), end: today(), notes: "" });
@@ -46,8 +73,10 @@ export default function Territories() {
     <>
       <div className="page-head">
         <div>
-          <h1>Territories</h1>
-          <p>Design and stage the field — assign reps, schedule blocks, and draw each zone on the map.</p>
+          <h1>Territory</h1>
+          <p>Draw zones, assign them, and watch the field live. {liveAgents.length > 0
+            ? `${liveAgents.length} ${liveAgents.length === 1 ? "agent is" : "agents are"} on the clock.`
+            : "Nobody is on the clock right now."}</p>
         </div>
         <button className="btn primary" onClick={createNew}>+ New territory</button>
       </div>
@@ -76,7 +105,8 @@ export default function Territories() {
 
         {/* right: map + staging editor */}
         <div className="terr-stage">
-          <TerritoryMap territories={state.territories} editId={drawId} onSave={saveBoundary} onCancel={() => setDrawId(null)} height={420} />
+          <TerritoryMap territories={state.territories} editId={drawId} onSave={saveBoundary}
+            onCancel={() => setDrawId(null)} height={420} liveAgents={liveAgents} />
 
           {sel ? (
             <div className="card" style={{ marginTop: 14 }}>
@@ -91,11 +121,27 @@ export default function Territories() {
                   <input className="input" value={sel.name} onChange={(e) => patch({ name: e.target.value })} />
                 </label>
                 <label className="field" style={{ margin: 0 }}>
-                  <span>Assign rep</span>
+                  <span>Campaign</span>
+                  <select className="select" value={campaign} disabled={!campaignsAvailable}
+                    onChange={(e) => setCampaign(e.target.value)}>
+                    <option value="all">All agents</option>
+                    {campaigns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                  <small className="muted">
+                    {campaignsAvailable
+                      ? "Narrows the agent list below to those onboarded with this campaign."
+                      : "Needs the campaigns update applied to the database."}
+                  </small>
+                </label>
+                <label className="field" style={{ margin: 0 }}>
+                  <span>Assign agent</span>
                   <select className="select" value={sel.assignedTo || ""} onChange={(e) => assign(e.target.value)}>
                     <option value="">— Unassigned —</option>
                     {reps.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                   </select>
+                  {campaign !== "all" && reps.length === 0 && (
+                    <small className="muted">Nobody is onboarded with that campaign yet.</small>
+                  )}
                 </label>
                 <label className="field" style={{ margin: 0 }}>
                   <span>Start</span>
@@ -138,6 +184,120 @@ export default function Territories() {
           )}
         </div>
       </div>
+
+      <DayReview
+        reps={allReps}
+        repId={reviewRep}
+        date={reviewDate}
+        onRep={setReviewRep}
+        onDate={setReviewDate}
+      />
     </>
+  );
+}
+
+// What an agent actually did on a given day, for reviewing after they have
+// signed off -- their doors, their totals, whether they closed the day out,
+// and which territory the work fell in.
+function DayReview({ reps, repId, date, onRep, onDate }) {
+  const state = getState();
+  const rep = reps.find((r) => r.id === repId) || null;
+  const rows = rep ? state.streetRows.filter((r) => r.repId === rep.id && r.date === date) : [];
+  const t = sheetTotals(rows);
+  const submitted = rep ? isDaySubmitted(rep.id, date) : false;
+
+  // Territory worked, from two independent signals: what was assigned to
+  // them for that date, and any zone their own doors actually fall inside.
+  // The second matters because an agent can work somewhere they were never
+  // formally assigned, which is exactly what a review should surface.
+  const assigned = rep
+    ? state.territories.filter((z) => z.assignedTo === rep.id
+        && (!z.start || z.start <= date) && (!z.end || z.end >= date))
+    : [];
+  const theirDoors = rep ? state.homes.filter((h) => h.repId === rep.id && h.lat != null && h.lng != null) : [];
+  const entered = rep
+    ? state.territories.filter((z) => z.boundary && z.boundary.length >= 3
+        && theirDoors.some((h) => pointInPolygon([h.lat, h.lng], z.boundary)))
+    : [];
+  const assignedIds = new Set(assigned.map((z) => z.id));
+  const unassignedZones = entered.filter((z) => !assignedIds.has(z.id));
+
+  return (
+    <div className="card" style={{ marginTop: 18 }}>
+      <div className="row between" style={{ flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
+        <div>
+          <h3 style={{ margin: 0 }}>Day review</h3>
+          <p className="muted" style={{ margin: "2px 0 0", fontSize: 13 }}>
+            What an agent worked on a given day, and where it fell.
+          </p>
+        </div>
+        <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+          <select className="select" value={repId} onChange={(e) => onRep(e.target.value)} style={{ width: "auto" }}>
+            <option value="">— Pick an agent —</option>
+            {reps.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
+          <input className="input" type="date" value={date} onChange={(e) => onDate(e.target.value)} style={{ width: "auto" }} />
+        </div>
+      </div>
+
+      {!rep ? (
+        <div className="empty">Pick an agent to see their day.</div>
+      ) : (
+        <>
+          <div className="row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+            <span className="pill">
+              <span className="dot" style={{ background: submitted ? "var(--green)" : "var(--amber)" }} />
+              {submitted ? "Day closed out" : "Not closed out"}
+            </span>
+            {assigned.length > 0
+              ? assigned.map((z) => (
+                  <span key={z.id} className="pill" style={{ borderColor: z.color, color: z.color }}>
+                    <span className="dot" style={{ background: z.color }} /> assigned: {z.name}
+                  </span>
+                ))
+              : <span className="pill muted-pill">no territory assigned that day</span>}
+            {unassignedZones.map((z) => (
+              <span key={z.id} className="pill" style={{ borderColor: "var(--amber)", color: "var(--amber)" }}>
+                <span className="dot" style={{ background: "var(--amber)" }} /> also worked: {z.name}
+              </span>
+            ))}
+          </div>
+
+          <div className="cards grid-5" style={{ marginBottom: 12 }}>
+            <div className="card stat"><div className="n">{t.doors}</div><div className="l">Doors</div></div>
+            <div className="card stat"><div className="n">{t.dm}</div><div className="l">DM</div></div>
+            <div className="card stat"><div className="n">{t.bid}</div><div className="l">Presentations</div></div>
+            <div className="card stat"><div className="n" style={{ color: "var(--green)" }}>{t.d}</div><div className="l">Sold</div></div>
+            <div className="card stat"><div className="n">{t.ni}</div><div className="l">Not interested</div></div>
+          </div>
+
+          {rows.length === 0 ? (
+            <div className="empty">Nothing logged for {date}.</div>
+          ) : (
+            <div className="table-scroll">
+              <table className="tbl">
+                <thead>
+                  <tr><th>#</th><th>Address</th><th>Marked</th><th>Customer</th><th>Comments</th><th>CB</th></tr>
+                </thead>
+                <tbody>
+                  {[...rows].sort((a, b) => (a.slot || 0) - (b.slot || 0)).map((r) => (
+                    <tr key={r.id}>
+                      <td className="muted">{r.slot || "—"}</td>
+                      <td>{r.street || <span className="muted">—</span>}</td>
+                      <td className="muted" style={{ whiteSpace: "nowrap" }}>
+                        {SHEET_COLS.filter((c) => r[c.key]).map((c) => c.lab).join(" · ") || "—"}
+                      </td>
+                      <td className="muted">{r.customer || "—"}</td>
+                      <td className="muted">{r.comments || "—"}</td>
+                      <td className="muted">{r.cb || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }

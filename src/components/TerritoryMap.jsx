@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { MapContainer, TileLayer, Polygon, Polyline, CircleMarker, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Polygon, Polyline, CircleMarker, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import { geocodeZip } from "../lib/geocode.js";
 import { US_CENTER } from "../lib/geo.js";
 import { mapDefaultCenter } from "../store";
@@ -24,7 +24,7 @@ function Fitter({ pts, token }) {
 }
 
 // Draw / edit a territory's boundary — by tapping vertices, or by loading a ZIP's outline.
-export default function TerritoryMap({ territories, editId, onSave, onCancel, height = 460 }) {
+export default function TerritoryMap({ territories, editId, onSave, onCancel, height = 460, liveAgents = [] }) {
   const editing = territories.find((t) => t.id === editId) || null;
   const [pts, setPts] = useState([]);
   const [zip, setZip] = useState("");
@@ -73,6 +73,18 @@ export default function TerritoryMap({ territories, editId, onSave, onCancel, he
         {pts.length === 2 && <Polyline positions={pts} pathOptions={{ color, weight: 2, dashArray: "5" }} />}
         {pts.map((p, i) => (
           <CircleMarker key={i} center={p} radius={5} pathOptions={{ color: "#fff", weight: 2, fillColor: color, fillOpacity: 1 }} />
+        ))}
+
+        {/* Agents on the clock right now, so a zone can be drawn around
+            where people actually are rather than from memory. */}
+        {liveAgents.map((a) => (
+          <CircleMarker key={a.id} center={[a.lat, a.lng]} radius={8}
+            pathOptions={{ color: "#fff", weight: 3, fillColor: a.inside === false ? "#dc2626" : "#15a34a", fillOpacity: 1 }}>
+            <Tooltip direction="top" offset={[0, -8]}>
+              <b>{a.name}</b>
+              {a.inside === false && <> — outside {a.zoneName}</>}
+            </Tooltip>
+          </CircleMarker>
         ))}
       </MapContainer>
 
