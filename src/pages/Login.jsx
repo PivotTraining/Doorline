@@ -22,13 +22,29 @@ export default function Login({ onBack }) {
   const [orgName, setOrgName] = useState("");
   const [err, setErr] = useState("");
   const [notice, setNotice] = useState("");
+  const [showPass, setShowPass] = useState(false);
 
   // One auth path for both the form and the quick-login buttons.
   const attempt = async (em, pw) => {
     if (!DEMO) {
       // Live mode: real Supabase Auth, then hydrate + subscribe.
-      const { error } = await authSignIn(em.trim(), pw);
-      if (error) return setErr(error.message);
+      let { error } = await authSignIn(em.trim(), pw);
+      // Mobile keyboards (swipe typing, autocomplete, tapping a suggestion)
+      // routinely append a space to the password field. The email was always
+      // trimmed but the password was not, so that stray space read as a wrong
+      // password with no way for the rep to see why. Retry trimmed rather than
+      // trimming up front, so a password that genuinely contains edge
+      // whitespace still works on the first attempt.
+      if (error && pw !== pw.trim()) {
+        ({ error } = await authSignIn(em.trim(), pw.trim()));
+      }
+      if (error) {
+        return setErr(
+          /invalid/i.test(error.message)
+            ? "That email and password didn't match. Passwords are case-sensitive — check for a capital letter at the start and no extra spaces. Tap the eye icon to see what you've typed."
+            : error.message
+        );
+      }
       // The password can be correct while the account still can't load -- if
       // the profile row is missing or unreadable, initLive() returns null and
       // nothing sets a session, so the user silently lands back on this
@@ -105,8 +121,17 @@ export default function Login({ onBack }) {
             </label>
             <label className="field">
               <span>Password</span>
-              <input className="input" type="password" value={pass} autoComplete="current-password"
-                onChange={(e) => setPass(e.target.value)} placeholder="••••" />
+              <div style={{ position: "relative" }}>
+                <input className="input" type={showPass ? "text" : "password"} value={pass} autoComplete="current-password"
+                  autoCapitalize="none" autoCorrect="off" spellCheck="false" style={{ paddingRight: 44, width: "100%" }}
+                  onChange={(e) => setPass(e.target.value)} placeholder="••••" />
+                <button type="button" onClick={() => setShowPass((s) => !s)}
+                  aria-label={showPass ? "Hide password" : "Show password"}
+                  title={showPass ? "Hide password" : "Show password"}
+                  style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: 16, padding: 6, lineHeight: 1 }}>
+                  {showPass ? "🙈" : "👁️"}
+                </button>
+              </div>
             </label>
             <button className="btn primary" type="submit" style={{ width: "100%" }}>Sign in</button>
           </form>
