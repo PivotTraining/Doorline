@@ -13,6 +13,7 @@ import { segmentReport, buildRepIndex } from "../src/lib/reports.js";
 import { dealCommission, repEarnings, campaignByName } from "../src/lib/commission.js";
 import { normalizeCampaign as _nc } from "../src/lib/campaigns.js";
 import { localDay, localDayInTZ } from "../src/lib/date.js";
+import { optionalRead } from "../src/lib/optionalRead.js";
 
 test("home round-trips through row mapping", () => {
   const h = { id: "h1", repId: "r1", addr: "1 Maple", lat: 33.7, lng: -84.3, status: "appt",
@@ -368,4 +369,52 @@ test("locationQueue backoff grows with consecutive failures", () => {
   assert.equal(q.nextDelay(1000), 1000); // 0 failures
   q.enqueue({ lat: 1, lng: 1 });
   return q.flush().then(() => { assert.equal(q.nextDelay(1000), 2000); }); // 1 failure → doubled
+});
+
+// ---------- campaigns (0021) ----------
+test("optionalRead degrades a missing table to no rows, not an error object", async () => {
+  // supabase-js resolves with {data,error} instead of throwing, so an
+  // un-handled missing table would otherwise be read AS data.
+  const missing = await optionalRead(Promise.resolve({ data: null, error: { message: 'relation "campaigns" does not exist' } }));
+  assert.deepEqual(missing.data, []);
+  assert.equal(missing.absent, true);
+  assert.equal(missing.error, null);
+});
+
+test("optionalRead degrades a rejected read too", async () => {
+  const thrown = await optionalRead(Promise.reject(new Error("network")));
+  assert.deepEqual(thrown.data, []);
+  assert.equal(thrown.absent, true);
+});
+
+test("optionalRead passes a healthy read through untouched", async () => {
+  const ok = await optionalRead(Promise.resolve({ data: [{ id: "c1" }], error: null }));
+  assert.deepEqual(ok.data, [{ id: "c1" }]);
+  assert.ok(!ok.absent, "a healthy read must not be marked absent");
+});
+
+test("campaign round-trips, preserving a fractional percentage rate", () => {
+  const c = { id: "c1", name: "Solar Premier", description: "d", promo: "p",
+    enrollmentUrl: "https://x/{code}", active: true,
+    commissionType: "percent", commissionAmount: 7.5 };
+  const back = M.campaignFromRow(M.campaignToRow(c, "org1"));
+  assert.equal(back.name, "Solar Premier");
+  assert.equal(back.commissionType, "percent");
+  // Storing this as cents would have mangled the rate.
+  assert.equal(back.commissionAmount, 7.5);
+  assert.equal(back.active, true);
+});
+
+test("campaign row omits legacy_key when the campaign has none", () => {
+  const row = M.campaignToRow({ id: "c1", name: "New" }, "org1");
+  assert.ok(!("legacy_key" in row), "must not send a null legacy_key over a migrated value");
+  assert.equal(M.campaignToRow({ id: "c1", name: "N", legacyKey: "c0" }, "org1").legacy_key, "c0");
+});
+
+test("campaign membership carries a composite key the delete path can split", () => {
+  const m = M.campaignMemberFromRow({ campaign_id: "camp-1", rep_id: "rep-2" });
+  assert.equal(m.id, "camp-1:rep-2");
+  const [campaignId, repId] = m.id.split(":");
+  assert.equal(campaignId, "camp-1");
+  assert.equal(repId, "rep-2");
 });

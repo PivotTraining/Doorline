@@ -114,3 +114,34 @@ export function fromPolygon(geo) {
   if (!geo || geo.type !== "Polygon") return [];
   return (geo.coordinates?.[0] || []).map(([lng, lat]) => [lat, lng]);
 }
+
+// ---------- campaigns (0021) ----------
+// commission_amount is numeric, not cents: the value means dollars when the
+// type is flat and a percentage when it is percent, so a rate like 7.5 has
+// to survive intact.
+export const campaignToRow = (c, orgId) => ({
+  id: c.id, org_id: orgId, name: c.name,
+  description: c.description || "", promo: c.promo || "",
+  enrollment_url: c.enrollmentUrl || "",
+  active: c.active !== false,
+  commission_type: c.commissionType === "percent" ? "percent" : "flat",
+  commission_amount: Number(c.commissionAmount) || 0,
+  ...(c.legacyKey ? { legacy_key: c.legacyKey } : {}),
+});
+export const campaignFromRow = (r) => ({
+  id: r.id, legacyKey: r.legacy_key || null, name: r.name,
+  description: r.description || "", promo: r.promo || "",
+  enrollmentUrl: r.enrollment_url || "", active: r.active !== false,
+  commissionType: r.commission_type === "percent" ? "percent" : "flat",
+  commissionAmount: Number(r.commission_amount) || 0,
+});
+
+// Membership has a composite key (campaign_id, rep_id) rather than an id,
+// so the store carries a synthetic one to keep list handling uniform.
+export const memberKey = (campaignId, repId) => `${campaignId}:${repId}`;
+export const campaignMemberToRow = (m, orgId) => ({
+  campaign_id: m.campaignId, rep_id: m.repId, org_id: orgId,
+});
+export const campaignMemberFromRow = (r) => ({
+  id: memberKey(r.campaign_id, r.rep_id), campaignId: r.campaign_id, repId: r.rep_id,
+});

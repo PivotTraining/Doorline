@@ -6,12 +6,19 @@
 import { supabase } from "../supabaseClient";
 import * as M from "./mappers";
 import { getCtx } from "./context";
+import { optionalRead } from "../lib/optionalRead.js";
 
 const org = () => getCtx().orgId;
 
+// Tables introduced by migration 0021 go through optionalRead(), which
+// degrades a missing table to "no rows" plus an `absent` flag instead of
+// failing the whole hydrate. See src/lib/optionalRead.js.
+const optional = optionalRead;
+
 // Initial hydrate: one round of reads → a store-shaped snapshot.
 export async function loadAll() {
-  const [o, profiles, homes, deals, posts, territories, street, presence, closeouts] = await Promise.all([
+  const [o, profiles, homes, deals, posts, territories, street, presence, closeouts,
+         campaigns, campaignMembers] = await Promise.all([
     supabase.from("organizations").select("*").limit(1).single(),
     supabase.from("profiles").select("*"),
     supabase.from("homes").select("*"),
@@ -21,6 +28,8 @@ export async function loadAll() {
     supabase.from("street_rows").select("*").order("slot", { nullsFirst: false }).order("created_at"),
     supabase.from("agent_presence").select("*"),
     supabase.from("daily_submissions").select("*"),
+    optional(supabase.from("campaigns").select("*")),
+    optional(supabase.from("campaign_members").select("*")),
   ]);
   // A missing migration, inaccessible table, or RLS error is NOT an empty
   // company's activity. Never replace a rep's pending local work with a
@@ -40,6 +49,9 @@ export async function loadAll() {
     posts: (posts.data || []).map((r) => M.postFromRow({ ...r, author_name: r.profiles?.full_name })),
     territories: (territories.data || []).map(M.territoryFromRow),
     streetRows: (street.data || []).map(M.streetRowFromRow),
+    campaignsAvailable: !campaigns.absent,
+    campaigns: (campaigns.data || []).map(M.campaignFromRow),
+    campaignMembers: (campaignMembers.data || []).map(M.campaignMemberFromRow),
     presence: Object.fromEntries((presence.data || []).map((p) => [p.rep_id, {
       online: p.online, since: p.started_at ? Date.parse(p.started_at) : null,
       lastSeen: Date.parse(p.last_seen), lat: p.lat, lng: p.lng, consent: undefined,
@@ -122,6 +134,15 @@ export async function loadReports() {
     };
   } catch { return null; }
 }
+export const upsertCampaign  = (c)      => supabase.from("campaigns").upsert(M.campaignToRow(c, org()));
+export const deleteCampaign  = (id)     => supabase.from("campaigns").delete().eq("id", id);
+export const upsertCampaignMember = (m) => supabase.from("campaign_members")
+  .upsert(M.campaignMemberToRow(m, org()), { onConflict: "campaign_id,rep_id" });
+export const deleteCampaignMember = (id) => {
+  const [campaignId, repId] = String(id).split(":");
+  return supabase.from("campaign_members").delete().eq("campaign_id", campaignId).eq("rep_id", repId);
+};
+
 export const upsertOrg       = (o)      => supabase.from("organizations").update({
   name: o.name, logo_path: o.logo, followup: o.followup, products: o.products,
   home_zip: o.homeZip || null, home_lat: o.homeLat ?? null, home_lng: o.homeLng ?? null,
