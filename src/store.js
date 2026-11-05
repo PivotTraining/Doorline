@@ -12,6 +12,7 @@ import * as M from "./api/mappers";
 import { localDay, localDayInTZ, guessTimezone } from "./lib/date.js";
 import { repZones, pointInPolygon, US_CENTER } from "./lib/geo.js";
 import { normalizeCampaigns, repCode } from "./lib/campaigns.js";
+import { orderStops } from "./lib/route.js";
 
 export { localDay, localDayInTZ, US_CENTER };
 
@@ -168,7 +169,7 @@ function seed() {
     r.dealId = dl.id; deals.push(dl);
   });
 
-  return { org, users, homes, deals, posts, territories, tracks, presence, streetRows, submittedDays: {}, reportBatches: [], reportRows: [], sessionId: null };
+  return { org, users, homes, deals, posts, territories, tracks, presence, streetRows, submittedDays: {}, reportBatches: [], reportRows: [], routes: [], routeStops: [], sessionId: null };
 }
 
 // Fill in fields that older persisted state won't have (forward migration).
@@ -193,7 +194,11 @@ function hydrate(s) {
   s.submittedDays = s.submittedDays || {};
   s.reportBatches = s.reportBatches || []; // published master-report batches
   s.reportRows = s.reportRows || [];       // each row assigned to a rep
-  s.homes = (s.homes || []).map((h) => ({ activity: [], ...h }));
+  s.routes = s.routes || [];               // planned walk lists
+  s.routeStops = s.routeStops || [];       // ordered doors within a route
+  // Doors saved before 0019 have no owner name and are not known customers;
+  // spreading h last keeps any real stored value.
+  s.homes = (s.homes || []).map((h) => ({ activity: [], ownerName: "", serviced: false, ...h }));
   s.deals = (s.deals || []).map((d) => ({ ts: Date.now(), ...d }));
   // Real users created before this field existed keep working — a missing
   // timezone falls back to the browser's own at read time, never a guess
@@ -340,9 +345,38 @@ export function removeUser(id) { state.users = state.users.filter(u => u.id !== 
 export function toggleStatus(id) { const u = state.users.find(x => x.id === id); if (u) { u.status = u.status === "active" ? "deactivated" : "active"; emit(); push("profiles", u); } }
 
 // ---------- doors / dispositions ----------
-export function addHome({ repId, lat, lng, addr }) {
-  const h = { id: uid(), repId, lat, lng, addr: addr || `Door @ ${lat.toFixed(5)}, ${lng.toFixed(5)}`, status: "untouched", notes: "", contact: "", phone: "", due: "", activity: [] };
+export function addHome({ repId, lat, lng, addr, ownerName = "", serviced = false }) {
+  const h = { id: uid(), repId, lat, lng, addr: addr || `Door @ ${lat.toFixed(5)}, ${lng.toFixed(5)}`, status: "untouched", notes: "", contact: "", phone: "", due: "", activity: [], ownerName, serviced };
   state.homes.push(h); emit(); push("homes", h); return h;
+}
+
+// Bulk-create doors from a parcel/address list (admin CSV import). This is
+// what makes an owner name available BEFORE the knock: the map stops being
+// only the doors a rep already tapped and becomes the street as it actually
+// is. Addresses already on file (same normalized addr) are updated rather
+// than duplicated, so re-importing a refreshed county extract is safe.
+export function importParcels(parcels, { repId = null } = {}) {
+  const key = (a) => String(a || "").trim().toLowerCase().replace(/\s+/g, " ");
+  const byAddr = new Map(state.homes.map((h) => [key(h.addr), h]));
+  let added = 0, updated = 0;
+  for (const p of parcels || []) {
+    const lat = Number(p.lat), lng = Number(p.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;   // unplaceable — skip, don't fake a location
+    const existing = p.addr ? byAddr.get(key(p.addr)) : null;
+    if (existing) {
+      // Never overwrite a real value with a blank one from a thinner extract.
+      const patch = {};
+      if (p.ownerName) patch.ownerName = p.ownerName;
+      if (p.serviced != null) patch.serviced = !!p.serviced;
+      if (Object.keys(patch).length) { Object.assign(existing, patch); push("homes", existing); updated++; }
+      continue;
+    }
+    const h = addHome({ repId, lat, lng, addr: p.addr || "", ownerName: p.ownerName || "", serviced: !!p.serviced });
+    byAddr.set(key(h.addr), h);
+    added++;
+  }
+  emit();
+  return { added, updated };
 }
 export function setDoor(id, fields) {
   const h = state.homes.find(x => x.id === id); if (!h) return;
@@ -370,6 +404,86 @@ export function togglePin(id) { const p = state.posts.find((x) => x.id === id); 
 export function addTerritory(t) { const nt = { id: uid(), color: "#2e90fa", notes: "", ...t }; state.territories.push(nt); emit(); push("territories", nt); return nt; }
 export function updateTerritory(id, patch) { const t = state.territories.find((x) => x.id === id); if (t) { Object.assign(t, patch); emit(); push("territories", t); } }
 export function removeTerritory(id) { state.territories = state.territories.filter((t) => t.id !== id); emit(); pushDel("territories", id); }
+
+// ---------- route planning ----------
+// A territory says WHERE a rep works; a route says in WHAT ORDER. Stops are
+// stored with an explicit seq so the walk order survives a reload and looks
+// identical on the manager's screen.
+export function repRoutes(repId, day) {
+  return state.routes
+    .filter((r) => (!repId || r.repId === repId) && (!day || r.day === day))
+    .sort((a, b) => (b.ts || 0) - (a.ts || 0));
+}
+// Stops of a route, in walk order, each joined to its door. A stop whose
+// home was deleted is dropped rather than rendered as a blank row.
+export function routeStops(routeId) {
+  return state.routeStops
+    .filter((s) => s.routeId === routeId)
+    .sort((a, b) => a.seq - b.seq)
+    .map((s) => ({ ...s, home: state.homes.find((h) => h.id === s.homeId) }))
+    .filter((s) => s.home);
+}
+export function createRoute({ repId, name, day, homeIds = [], start = null }) {
+  const rt = { id: uid(), repId, name: name || "Route", day: day || localDay(), ts: Date.now() };
+  state.routes.unshift(rt);
+  push("routes", rt);
+  if (homeIds.length) addRouteStops(rt.id, homeIds, start);
+  emit();
+  return rt;
+}
+// Add doors to a route and (re)compute the walking order for the whole route,
+// so an insert can't leave the sequence half-sorted.
+export function addRouteStops(routeId, homeIds, start = null) {
+  const already = new Set(state.routeStops.filter((s) => s.routeId === routeId).map((s) => s.homeId));
+  for (const homeId of homeIds) {
+    if (already.has(homeId) || !state.homes.some((h) => h.id === homeId)) continue;
+    const s = { id: uid(), routeId, homeId, seq: already.size, done: false };
+    state.routeStops.push(s);
+    already.add(homeId);
+  }
+  optimizeRoute(routeId, start);
+}
+// Re-sequence a route into the shortest walk from `start` (nearest-neighbour
+// + 2-opt, see lib/route.js). Completed stops keep their place at the front
+// so a rep mid-route doesn't get re-sent to doors they've already done.
+export function optimizeRoute(routeId, start = null) {
+  const mine = state.routeStops.filter((s) => s.routeId === routeId);
+  const done = mine.filter((s) => s.done);
+  const todo = mine.filter((s) => !s.done);
+  const pts = todo
+    .map((s) => ({ stop: s, ...(state.homes.find((h) => h.id === s.homeId) || {}) }))
+    .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+  const ordered = orderStops(pts, start);
+  // Anything without coordinates keeps a stable place at the tail.
+  const placed = new Set(ordered.map((p) => p.stop.id));
+  const tail = todo.filter((s) => !placed.has(s.id));
+  // Every stop is written, not just the ones whose seq moved: a freshly added
+  // stop can land on the index it already had, and skipping it would leave the
+  // row absent server-side.
+  [...done, ...ordered.map((p) => p.stop), ...tail].forEach((s, i) => {
+    s.seq = i;
+    push("route_stops", s);
+  });
+  emit();
+}
+export function setRouteStopDone(stopId, done) {
+  const s = state.routeStops.find((x) => x.id === stopId); if (!s) return;
+  s.done = !!done; emit(); push("route_stops", s);
+}
+export function removeRouteStop(stopId) {
+  state.routeStops = state.routeStops.filter((s) => s.id !== stopId);
+  emit(); pushDel("route_stops", stopId);
+}
+export function removeRoute(id) {
+  const stops = state.routeStops.filter((s) => s.routeId === id);
+  state.routeStops = state.routeStops.filter((s) => s.routeId !== id);
+  state.routes = state.routes.filter((r) => r.id !== id);
+  emit();
+  // route_stops cascades server-side; delete locally-known ids anyway so a
+  // demo/offline store stays consistent.
+  for (const s of stops) pushDel("route_stops", s.id);
+  pushDel("routes", id);
+}
 
 // ---------- door activity funnel ----------
 export function logActivity(homeId, type) {
@@ -637,6 +751,14 @@ export function applyRemote(table, payload) {
   } else if (table === "report_rows") {
     if (ev === "DELETE") state.reportRows = state.reportRows.filter((r) => r.id !== old?.id);
     else if (row) upsert(state.reportRows, M.reportRowFromRow(row));
+  } else if (table === "routes") {
+    if (ev === "DELETE") {
+      state.routes = state.routes.filter((r) => r.id !== old?.id);
+      state.routeStops = state.routeStops.filter((s) => s.routeId !== old?.id);
+    } else if (row) upsert(state.routes, M.routeFromRow(row), true);
+  } else if (table === "route_stops") {
+    if (ev === "DELETE") state.routeStops = state.routeStops.filter((s) => s.id !== old?.id);
+    else if (row) upsert(state.routeStops, M.routeStopFromRow(row));
   }
   emit();
 }

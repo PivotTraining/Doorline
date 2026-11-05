@@ -8,11 +8,36 @@ export const homeToRow = (h, orgId) => ({
   addr: h.addr, lat: h.lat, lng: h.lng, status: h.status,
   contact: h.contact || null, phone: h.phone || null, notes: h.notes || null,
   due: h.due || null, activity: h.activity || [],
+  // 0019 columns, sent only when they actually carry a value -- the same
+  // guard dealToRow and streetRowToRow use. A database that hasn't run 0019
+  // has no owner_name/serviced column, and PostgREST rejects the WHOLE row
+  // (PGRST204) when an unknown column is present, which would block every
+  // door save rather than just the new fields. An untouched door therefore
+  // sends the exact payload it sent before this feature existed.
+  ...(h.ownerName ? { owner_name: h.ownerName } : {}),
+  ...(h.serviced ? { serviced: true } : {}),
 });
 export const homeFromRow = (r) => ({
   id: r.id, repId: r.rep_id, addr: r.addr, lat: r.lat, lng: r.lng,
   status: r.status, contact: r.contact || "", phone: r.phone || "",
   notes: r.notes || "", due: r.due || "", activity: r.activity || [],
+  ownerName: r.owner_name || "", serviced: !!r.serviced,
+});
+
+export const routeToRow = (rt, orgId) => ({
+  id: rt.id, org_id: orgId, rep_id: rt.repId || null,
+  name: rt.name || "Route", day: rt.day,
+});
+export const routeFromRow = (r) => ({
+  id: r.id, repId: r.rep_id || "", name: r.name || "Route", day: r.day,
+  ts: r.created_at ? Date.parse(r.created_at) : Date.now(),
+});
+export const routeStopToRow = (s, orgId) => ({
+  id: s.id, org_id: orgId, route_id: s.routeId, home_id: s.homeId,
+  seq: s.seq ?? 0, done: !!s.done,
+});
+export const routeStopFromRow = (r) => ({
+  id: r.id, routeId: r.route_id, homeId: r.home_id, seq: r.seq ?? 0, done: !!r.done,
 });
 
 export const dealToRow = (d, orgId) => ({

@@ -34,6 +34,8 @@ async function resync() {
     loadSnapshot(snap, activeProfile.id);
     const reports = await S.loadReports();
     if (reports) loadSnapshot(reports, activeProfile.id);
+    const routes = await S.loadRoutes();
+    if (routes) loadSnapshot(routes, activeProfile.id);
   } catch {
     // A failed resync is non-fatal — the live socket and write queue carry on.
   } finally {
@@ -63,9 +65,16 @@ export async function initLive() {
   // stop the app from booting.
   const reports = await S.loadReports();
   if (reports) loadSnapshot(reports, profile.id);
+  // Routes likewise: a database that hasn't run 0019 has no routes table,
+  // and that must cost the rep their route list, not their whole app.
+  const routes = await S.loadRoutes();
+  if (routes) loadSnapshot(routes, profile.id);
   lastResync = Date.now();                    // fresh snapshot — don't immediately re-pull
   if (unsub) unsub();
-  unsub = subscribeOrg(profile.org_id, applyRemote);
+  // Only bind Realtime to the route tables once we've seen them read cleanly
+  // (see subscribeOrg): binding to a table that doesn't exist can take the
+  // whole channel down with it.
+  unsub = subscribeOrg(profile.org_id, applyRemote, routes ? ["routes", "route_stops"] : []);
   if (stopFlush) stopFlush();
   stopFlush = startLocationFlush();          // drain the GPS queue on an interval
   if (stopWriteFlush) stopWriteFlush();

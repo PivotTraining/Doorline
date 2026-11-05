@@ -39,12 +39,13 @@ export default function Doors({ user }) {
           <div className="table-scroll">
             <table className="tbl">
               <thead>
-                <tr><th>Address</th><th>Outcome</th><th>Contact</th><th>Notes</th><th></th></tr>
+                <tr><th>Address</th><th>Homeowner</th><th>Outcome</th><th>Contact</th><th>Notes</th><th></th></tr>
               </thead>
               <tbody>
                 {shown.map((h) => (
                   <tr key={h.id}>
-                    <td>{h.addr}</td>
+                    <td>{h.addr}{h.serviced && <span title="Already a customer"> ✅</span>}</td>
+                    <td className="muted">{h.ownerName || "—"}</td>
                     <td><span className="pill"><span className="dot" style={{ background: DISPOS[h.status].hex }} /> {DISPOS[h.status].lab}</span></td>
                     <td className="muted">{h.contact || "—"}</td>
                     <td className="muted" style={{ maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.notes || "—"}</td>
