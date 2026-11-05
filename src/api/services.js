@@ -152,6 +152,35 @@ export const upsertOrg       = (o)      => supabase.from("organizations").update
 // auth.users row a profile must reference, so this goes through a service-
 // role edge function that makes the auth user + profile atomically and
 // returns a temporary password for the admin to hand off.
+// Change a teammate's sign-in email or reset their password. Same
+// service-role reasoning as createTeamMember: the browser cannot touch
+// another user's auth record.
+export const updateTeamMember = async (payload) => {
+  const url = import.meta.env.VITE_SUPABASE_URL;
+  const { data } = await supabase.auth.getSession();
+  const res = await fetch(`${url}/functions/v1/update-team-member`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${data?.session?.access_token ?? ""}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const d = String(body.detail || body.error || "");
+    if (/registered|already exists|duplicate/i.test(d)) return { error: "Another account already uses that email." };
+    if (body.error === "forbidden_owner") return { error: "Only the owner can change the owner's sign-in details." };
+    if (body.error === "forbidden") return { error: "Only an owner or admin can change sign-in details." };
+    if (body.error === "not_found") return { error: "That person is not on your team." };
+    if (body.error === "bad_email") return { error: "That doesn't look like a valid email address." };
+    if (body.error === "weak_password") return { error: "Password must be at least 6 characters." };
+    return { error: d || "Could not update this user." };
+  }
+  return body; // { id, email, tempPassword? }
+};
+
 export const createTeamMember = async (payload) => {
   const url = import.meta.env.VITE_SUPABASE_URL;
   const { data } = await supabase.auth.getSession();

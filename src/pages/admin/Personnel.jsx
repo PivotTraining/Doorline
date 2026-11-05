@@ -1,15 +1,16 @@
 import { useState } from "react";
-import { useStore, getState, addUser, updateUser, removeUser, toggleStatus, ROLE_LABEL, PLAN_NAME } from "../../store";
+import { useStore, getState, addUser, updateUser, removeUser, toggleStatus, ROLE_LABEL,
+  activeCampaigns, campaignsForRep, assignCampaign, unassignCampaign } from "../../store";
 import { geocodeZip } from "../../lib/geocode.js";
 import { US_TIMEZONES, guessTimezone } from "../../lib/date.js";
 import { repCode } from "../../lib/campaigns.js";
 import Modal from "../../components/Modal.jsx";
 import { DEMO } from "../../supabaseClient.js";
 import { issueCompanyInvite } from "../../api/auth.js";
+import { updateTeamMember } from "../../api/services.js";
 
 const ROLES = ["owner", "admin", "manager", "rep", "viewer"];
-const PLANS = [3900, 5900, 8900];
-const blank = () => ({ name: "", email: "", role: "rep", plan: 5900, territory: "—", pass: "", timezone: guessTimezone(), homeZip: "", homeLat: null, homeLng: null });
+const blank = () => ({ name: "", email: "", role: "rep", territory: "—", pass: "", timezone: guessTimezone(), homeZip: "", homeLat: null, homeLng: null });
 
 export default function Personnel() {
   useStore();
@@ -18,7 +19,8 @@ export default function Personnel() {
   const [err, setErr] = useState("");
   const [zipBusy, setZipBusy] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [created, setCreated] = useState(null); // {email, tempPassword} after a live add
+  const [created, setCreated] = useState(null); // {email, tempPassword} after a live add or reset
+  const [campaignsFor, setCampaignsFor] = useState(null); // person whose campaigns are open
   const [enrollmentUrl, setEnrollmentUrl] = useState("");
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteError, setInviteError] = useState("");
@@ -63,12 +65,35 @@ export default function Personnel() {
       if (r.tempPassword) setCreated({ email: d.email, tempPassword: r.tempPassword });
       return;
     }
-    updateUser(d.id, { name: d.name, role: d.role, plan: Number(d.plan), territory: d.territory, timezone: d.timezone || null, homeZip: d.homeZip || null, homeLat: d.homeLat, homeLng: d.homeLng });
+    // `plan` is deliberately absent: the form no longer collects a seat
+    // price, and sending one would overwrite the stored value with a
+    // default the admin never chose.
+    const original = state.users.find((u) => u.id === d.id);
+    const emailChanged = !DEMO && d.email.trim().toLowerCase() !== (original?.email || "").toLowerCase();
+    if (emailChanged) {
+      setBusy(true);
+      const r = await updateTeamMember({ id: d.id, email: d.email.trim() });
+      setBusy(false);
+      if (r.error) return setErr(r.error);
+      updateUser(d.id, { email: r.email });
+    }
+    updateUser(d.id, { name: d.name, role: d.role, territory: d.territory, timezone: d.timezone || null, homeZip: d.homeZip || null, homeLat: d.homeLat, homeLng: d.homeLng });
     setForm(null);
   };
 
-  const billed = state.users.filter((u) => u.plan > 0 && u.status === "active");
-  const monthly = billed.reduce((a, u) => a + u.plan, 0);
+  // Generates a fresh temporary password and shows it once, to hand over.
+  const resetPassword = async (d) => {
+    if (!confirm(`Reset ${d.name}'s password? Their current one stops working immediately.`)) return;
+    setErr("");
+    setBusy(true);
+    const r = await updateTeamMember({ id: d.id, password: true });
+    setBusy(false);
+    if (r.error) return setErr(r.error);
+    setForm(null);
+    setCreated({ email: r.email, tempPassword: r.tempPassword, reset: true });
+  };
+
+  const activeCount = state.users.filter((u) => u.status === "active").length;
   const needsLocation = (role) => ["rep", "manager"].includes(role);
 
   return (
@@ -76,7 +101,7 @@ export default function Personnel() {
       <div className="page-head">
         <div>
           <h1>Personnel</h1>
-          <p>{state.users.length} people · {billed.length} billable seats · ${(monthly / 100).toFixed(0)}/mo</p>
+          <p>{state.users.length} people · {activeCount} active · click a name to see their campaigns</p>
         </div>
         <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
           <button className="btn" onClick={generateLink} disabled={inviteBusy}>{inviteBusy ? "Creating link…" : "🔗 Company enrollment link"}</button>
@@ -102,18 +127,20 @@ export default function Personnel() {
         <div className="table-scroll">
           <table className="tbl">
             <thead>
-              <tr><th>Name</th><th>Rep ID</th><th>Email</th><th>Role</th><th>Territory</th><th>Home ZIP</th><th>Plan</th><th>Status</th><th></th></tr>
+              <tr><th>Name</th><th>Rep ID</th><th>Email</th><th>Role</th><th>Territory</th><th>Home ZIP</th><th>Status</th><th></th></tr>
             </thead>
             <tbody>
               {state.users.map((u) => (
                 <tr key={u.id}>
-                  <td>{u.name}</td>
+                  <td>
+                    <button className="rep-link linklike" title={`Campaigns ${u.name} is onboarded with`}
+                      onClick={() => setCampaignsFor(u)}>{u.name}</button>
+                  </td>
                   <td className="muted" style={{ fontFamily: "monospace" }}>{repCode(u.id)}</td>
                   <td className="muted">{u.email}</td>
                   <td><span className="tag">{ROLE_LABEL[u.role]}</span></td>
                   <td className="muted">{u.territory}</td>
                   <td className="muted">{u.homeZip || "—"}</td>
-                  <td className="muted">{PLAN_NAME[u.plan] || "—"}{u.plan > 0 ? ` · $${(u.plan / 100).toFixed(0)}` : ""}</td>
                   <td>
                     <span className="pill">
                       <span className="dot" style={{ background: u.status === "active" ? "var(--green)" : "var(--muted)" }} />
@@ -151,10 +178,28 @@ export default function Personnel() {
             <input className="input" value={form.data.name} onChange={(e) => setForm({ ...form, data: { ...form.data, name: e.target.value } })} />
           </label>
           <label className="field">
-            <span>Email</span>
-            <input className="input" type="email" value={form.data.email} disabled={form.mode === "edit"}
+            <span>Email (their username)</span>
+            <input className="input" type="email" value={form.data.email} disabled={form.mode === "edit" && DEMO}
               onChange={(e) => setForm({ ...form, data: { ...form.data, email: e.target.value } })} />
+            {form.mode === "edit" && (
+              <small className="muted">
+                {DEMO
+                  ? "Changing the sign-in email needs the live database."
+                  : "This is what they sign in with. Tell them before you save a change."}
+              </small>
+            )}
           </label>
+          {form.mode === "edit" && !DEMO && (
+            <div className="field">
+              <span>Password</span>
+              <div>
+                <button className="btn sm" type="button" disabled={busy} onClick={() => resetPassword(form.data)}>
+                  {busy ? "Working…" : "Reset password"}
+                </button>
+              </div>
+              <small className="muted">Issues a new temporary password and shows it once, for you to hand over. Their current password stops working straight away.</small>
+            </div>
+          )}
           <div className="row" style={{ gap: 10 }}>
             <label className="field" style={{ flex: 1 }}>
               <span>Role</span>
@@ -190,14 +235,6 @@ export default function Personnel() {
               </label>
             </>
           )}
-          {["rep", "manager"].includes(form.data.role) && (
-            <label className="field">
-              <span>Plan (billable seat)</span>
-              <select className="select" value={form.data.plan} onChange={(e) => setForm({ ...form, data: { ...form.data, plan: Number(e.target.value) } })}>
-                {PLANS.map((p) => <option key={p} value={p}>{PLAN_NAME[p]} · ${(p / 100).toFixed(0)}/mo</option>)}
-              </select>
-            </label>
-          )}
           {form.mode === "add" && (
             <label className="field" style={{ marginBottom: 0 }}>
               <span>Temporary password</span>
@@ -211,7 +248,7 @@ export default function Personnel() {
 
       {created && (
         <Modal
-          title="✅ Account created"
+          title={created.reset ? "🔑 Password reset" : "✅ Account created"}
           onClose={() => setCreated(null)}
           footer={<button className="btn primary" onClick={() => setCreated(null)}>Done</button>}
         >
@@ -232,6 +269,53 @@ export default function Personnel() {
           </p>
         </Modal>
       )}
+
+      {campaignsFor && (
+        <CampaignsForPerson person={campaignsFor} onClose={() => setCampaignsFor(null)} />
+      )}
     </>
+  );
+}
+
+// Which campaigns a person is onboarded with, and the place to change it.
+function CampaignsForPerson({ person, onClose }) {
+  useStore();
+  const all = activeCampaigns();
+  const available = getState().campaignsAvailable;
+  const mine = new Set(campaignsForRep(person.id).map((c) => c.id));
+
+  return (
+    <Modal
+      title={`${person.name} · campaigns`}
+      onClose={onClose}
+      footer={<button className="btn primary" onClick={onClose}>Done</button>}
+    >
+      {!available ? (
+        <p className="muted" style={{ marginTop: 0 }}>
+          Campaign assignment needs the campaigns update applied to the database. Until then, campaigns
+          are the company-wide list under the Campaigns tab and everyone sees all of them.
+        </p>
+      ) : all.length === 0 ? (
+        <p className="muted" style={{ marginTop: 0 }}>No campaigns yet — create one on the Campaigns tab first.</p>
+      ) : (
+        <>
+          <p className="muted" style={{ marginTop: 0, fontSize: 13 }}>
+            Tick the campaigns {person.name.split(" ")[0]} is onboarded with. This drives their campaign
+            documents and the campaign filters on Team Stats and Territory.
+          </p>
+          {all.map((c) => (
+            <label key={c.id} className="row" style={{ gap: 10, alignItems: "flex-start", padding: "8px 0", borderTop: "1px solid var(--border)" }}>
+              <input type="checkbox" style={{ width: 18, height: 18, marginTop: 2, accentColor: "var(--brand)" }}
+                checked={mine.has(c.id)}
+                onChange={(e) => (e.target.checked ? assignCampaign(c.id, person.id) : unassignCampaign(c.id, person.id))} />
+              <span style={{ minWidth: 0 }}>
+                <b>{c.name}</b>{!c.active && <span className="muted"> · paused</span>}
+                {c.description && <div className="muted" style={{ fontSize: 12 }}>{c.description}</div>}
+              </span>
+            </label>
+          ))}
+        </>
+      )}
+    </Modal>
   );
 }
