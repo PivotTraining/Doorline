@@ -61,12 +61,21 @@ export const profileToRow = (u, orgId) => ({
   id: u.id, org_id: orgId, full_name: u.name, email: u.email,
   role: u.role, status: u.status, territory: u.territory, seat_price_cents: u.plan || 0,
   timezone: u.timezone || null, home_zip: u.homeZip || null, home_lat: u.homeLat ?? null, home_lng: u.homeLng ?? null,
+  manager_id: u.managerId || null,
+  // office_id arrives with migration 0021. Emitted only when set, so this
+  // client can still write profiles to a database that predates it --
+  // PostgREST rejects the whole row for one unknown column.
+  ...(u.officeId ? { office_id: u.officeId } : {}),
 });
 export const profileFromRow = (r) => ({
   id: r.id, name: r.full_name, email: r.email, role: r.role, status: r.status,
   territory: r.territory || "—", plan: r.seat_price_cents || 0,
   timezone: r.timezone || null, homeZip: r.home_zip || null, homeLat: r.home_lat ?? null, homeLng: r.home_lng ?? null,
+  managerId: r.manager_id || null, officeId: r.office_id || null,
 });
+
+export const officeToRow = (o, orgId) => ({ id: o.id, org_id: orgId, name: o.name });
+export const officeFromRow = (r) => ({ id: r.id, name: r.name });
 
 export const reportBatchToRow = (b, orgId) => ({
   id: b.id, org_id: orgId, name: b.name, cols: b.cols || [], uploaded_by: b.uploadedBy || null,

@@ -27,6 +27,7 @@ const HANDLERS = {
   territories: { upsert: S.upsertTerritory, del: S.deleteTerritory },
   street_rows: { upsert: S.upsertStreetRow, del: S.deleteStreetRow },
   daily_submissions: { upsert: S.upsertDailySubmission, del: S.deleteDailySubmission },
+  offices: { upsert: S.upsertOffice, del: S.deleteOffice },
   campaigns: { upsert: S.upsertCampaign, del: S.deleteCampaign },
   campaign_members: { upsert: S.upsertCampaignMember, del: S.deleteCampaignMember },
   organizations: { upsert: S.upsertOrg, del: () => {} },

@@ -18,7 +18,7 @@ const optional = optionalRead;
 // Initial hydrate: one round of reads → a store-shaped snapshot.
 export async function loadAll() {
   const [o, profiles, homes, deals, posts, territories, street, presence, closeouts,
-         campaigns, campaignMembers] = await Promise.all([
+         campaigns, campaignMembers, offices] = await Promise.all([
     supabase.from("organizations").select("*").limit(1).single(),
     supabase.from("profiles").select("*"),
     supabase.from("homes").select("*"),
@@ -30,6 +30,7 @@ export async function loadAll() {
     supabase.from("daily_submissions").select("*"),
     optional(supabase.from("campaigns").select("*")),
     optional(supabase.from("campaign_members").select("*")),
+    optional(supabase.from("offices").select("*")),
   ]);
   // A missing migration, inaccessible table, or RLS error is NOT an empty
   // company's activity. Never replace a rep's pending local work with a
@@ -50,6 +51,7 @@ export async function loadAll() {
     territories: (territories.data || []).map(M.territoryFromRow),
     streetRows: (street.data || []).map(M.streetRowFromRow),
     campaignsAvailable: !campaigns.absent,
+    offices: (offices.data || []).map(M.officeFromRow),
     campaigns: (campaigns.data || []).map(M.campaignFromRow),
     campaignMembers: (campaignMembers.data || []).map(M.campaignMemberFromRow),
     presence: Object.fromEntries((presence.data || []).map((p) => [p.rep_id, {
@@ -134,6 +136,8 @@ export async function loadReports() {
     };
   } catch { return null; }
 }
+export const upsertOffice    = (o)      => supabase.from("offices").upsert(M.officeToRow(o, org()));
+export const deleteOffice    = (id)     => supabase.from("offices").delete().eq("id", id);
 export const upsertCampaign  = (c)      => supabase.from("campaigns").upsert(M.campaignToRow(c, org()));
 export const deleteCampaign  = (id)     => supabase.from("campaigns").delete().eq("id", id);
 export const upsertCampaignMember = (m) => supabase.from("campaign_members")

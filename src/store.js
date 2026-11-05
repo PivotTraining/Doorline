@@ -253,7 +253,7 @@ function blankLive() {
     org: { name: "Doorline", logo: null, homeZip: null, homeLat: null, homeLng: null },
     users: [], homes: [], deals: [], posts: [], territories: [], tracks: {},
     presence: {}, streetRows: [], submittedDays: {},
-    reportBatches: [], reportRows: [], campaigns: [], campaignMembers: [],
+    reportBatches: [], reportRows: [], campaigns: [], campaignMembers: [], offices: [],
     campaignsAvailable: false, sessionId: null,
   };
 }
