@@ -164,3 +164,15 @@ export const campaignDocFromRow = (r) => ({
   mime: r.mime_type || "", size: r.size_bytes ?? null, uploadedBy: r.uploaded_by || null,
   ts: r.created_at ? Date.parse(r.created_at) : Date.now(),
 });
+
+// ---------- billing ledger (0021) ----------
+export const chargeFromRow = (r) => ({
+  id: r.id, description: r.description, cents: Number(r.amount_cents) || 0,
+  periodStart: r.period_start || "", periodEnd: r.period_end || "",
+  dueDate: r.due_date || "", ts: r.created_at ? Date.parse(r.created_at) : Date.now(),
+});
+export const paymentFromRow = (r) => ({
+  id: r.id, cents: Number(r.amount_cents) || 0, method: r.method || "other",
+  reference: r.reference || "", receiptNumber: r.receipt_number,
+  paidAt: r.paid_at ? Date.parse(r.paid_at) : Date.now(),
+});

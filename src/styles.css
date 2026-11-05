@@ -487,3 +487,9 @@ tr.rep-row:hover .rep-link { text-decoration: underline; }
   padding: 7px 0; border-top: 1px solid var(--border);
 }
 .doc-list li > .linklike { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+
+/* Payment receipt */
+.receipt {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 16px; background: var(--panel-2);
+}

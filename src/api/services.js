@@ -264,3 +264,45 @@ export const deleteCampaignDoc = async (doc) => {
   await supabase.storage.from(DOC_BUCKET).remove([doc.path]);
   return {};
 };
+
+// ---------- billing ledger (0021) ----------
+// Owner/admin only by RLS. Fetched on demand rather than hydrated: reps
+// and managers cannot read these at all, so putting them in the shared
+// snapshot would mean every agent's sign-in carrying a read that is
+// guaranteed to be denied.
+export const loadBilling = async () => {
+  const [charges, payments] = await Promise.all([
+    optionalRead(supabase.from("billing_charges").select("*").order("created_at", { ascending: false })),
+    optionalRead(supabase.from("billing_payments").select("*").order("paid_at", { ascending: false })),
+  ]);
+  return {
+    absent: !!(charges.absent || payments.absent),
+    charges: (charges.data || []).map(M.chargeFromRow),
+    payments: (payments.data || []).map(M.paymentFromRow),
+  };
+};
+
+export const addBillingCharge = async (c) => {
+  const r = await supabase.from("billing_charges").insert({
+    org_id: org(), description: c.description, amount_cents: c.cents,
+    period_start: c.periodStart || null, period_end: c.periodEnd || null,
+    due_date: c.dueDate || null, created_by: getCtx().repId || null,
+  }).select("*").single();
+  return r.error ? { error: r.error.message } : { charge: M.chargeFromRow(r.data) };
+};
+
+export const addBillingPayment = async (p) => {
+  const r = await supabase.from("billing_payments").insert({
+    org_id: org(), amount_cents: p.cents, method: p.method || "other",
+    reference: p.reference || null, receipt_number: p.receiptNumber,
+    paid_at: p.paidAt || new Date().toISOString(), recorded_by: getCtx().repId || null,
+  }).select("*").single();
+  if (r.error) {
+    // The unique (org_id, receipt_number) index is what guarantees two
+    // payments can never share a receipt number, even if two admins record
+    // one at the same moment.
+    if (/duplicate|unique/i.test(r.error.message)) return { error: "That receipt number is already used. Try again." };
+    return { error: r.error.message };
+  }
+  return { payment: M.paymentFromRow(r.data) };
+};
