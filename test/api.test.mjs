@@ -90,6 +90,28 @@ test("street row round-trips including the Not Qualified disposition", () => {
   assert.equal(back.cb, "5:30");
 });
 
+test("street row round-trips its linked deal id (regression: marking D lost its deal link on refresh)", () => {
+  const r = { id: "s2", repId: "r1", date: "2026-07-08", street: "2 Oak", nh: false, rl: false,
+    dm: false, bid: false, d: true, ni: false, nq: false, customer: "C", phone: "", comments: "", cb: "", done: false, snoozeUntil: 0, dealId: "deal-123" };
+  const row = M.streetRowToRow(r, "org1");
+  assert.equal(row.deal_id, "deal-123");
+  const back = M.streetRowFromRow(row);
+  assert.equal(back.dealId, "deal-123");
+});
+
+test("street row omits deal_id entirely when there is no deal (safe before migration 0017)", () => {
+  // Sending deal_id unconditionally made PostgREST reject EVERY street-row
+  // write with PGRST204 on a database that hadn't applied 0017 yet, silently
+  // blocking a rep's whole day from saving. A row with no deal must not
+  // reference the column at all.
+  const r = { id: "s3", repId: "r1", date: "2026-07-08", street: "3 Pine", nh: true, rl: false,
+    dm: false, bid: false, d: false, ni: false, nq: false, customer: "", phone: "", comments: "", cb: "", done: false, snoozeUntil: 0, dealId: null };
+  const row = M.streetRowToRow(r, "org1");
+  assert.ok(!("deal_id" in row), "deal_id must be absent, not null, when unset");
+  assert.equal(row.street, "3 Pine"); // the rest of the row is unaffected
+  assert.equal(M.streetRowFromRow(row).dealId, null);
+});
+
 test("territory polygon round-trips (lat/lng order + closed ring)", () => {
   const ring = [[33.70, -84.40], [33.72, -84.40], [33.72, -84.38]];
   const row = M.territoryToRow({ id: "t1", name: "North", color: "#000", assignedTo: "r1", boundary: ring, start: "", end: "", notes: "" }, "org1");
@@ -182,6 +204,59 @@ test("writeQueue collapses a superseded write instead of replaying stale state",
   assert.equal(q.size(), 1);
   await q.flush();
   assert.deepEqual(applied, ["sold"]); // only the latest state was ever sent
+});
+
+test("writeQueue treats a resolved {error} as a failure, not a success (regression: silent data loss on RLS rejection)", async () => {
+  // supabase-js resolves to {data, error} on a database-level rejection (e.g.
+  // an RLS policy violation) -- it does NOT throw. A handler that mirrors
+  // that exact shape used to be counted as flushed and dropped forever.
+  let mode = "reject";
+  const calls = [];
+  const handlers = {
+    street_rows: {
+      upsert: async (r) => { calls.push(r.id); return mode === "reject" ? { data: null, error: { message: "new row violates row-level security policy" } } : { data: r, error: null }; },
+      del: async () => ({ data: null, error: null }),
+    },
+  };
+  const q = createWriteQueue({ handlers, persist: false });
+  q.enqueue("street_rows", "upsert", { id: "s1", street: "1 Maple" });
+  let r = await q.flush();
+  assert.equal(r.flushed, 0);
+  assert.equal(q.size(), 1); // must stay queued -- a resolved error is not a success
+
+  mode = "ok";
+  r = await q.flush();
+  assert.equal(r.flushed, 1);
+  assert.equal(q.size(), 0);
+  assert.deepEqual(calls, ["s1", "s1"]);
+});
+
+test("writeQueue keeps writes enqueued DURING a flush (regression: in-flight edits were discarded)", async () => {
+  // flush() used to rebuild the queue as `q = remaining`, replacing it
+  // wholesale -- so any door a rep logged while requests were still in
+  // flight was silently dropped from the queue and never sent. This is the
+  // "numbers disappear" race: nothing failed, the entry just ceased to exist.
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const sent = [];
+  const handlers = {
+    street_rows: {
+      upsert: async (r) => { sent.push(r.id); if (r.id === "slow") await gate; return { error: null }; },
+      del: async () => ({ error: null }),
+    },
+  };
+  const q = createWriteQueue({ handlers, persist: false });
+  q.enqueue("street_rows", "upsert", { id: "slow", street: "1 First" });
+
+  const flushing = q.flush();                                  // starts, blocks on "slow"
+  q.enqueue("street_rows", "upsert", { id: "typed-midflight", street: "2 Second" }); // rep keeps working
+  release();
+  await flushing;
+
+  // The mid-flight entry must still exist -- either already sent by the
+  // follow-up pass, or still queued for the next one. It must never vanish.
+  const survived = sent.includes("typed-midflight") || q.size() > 0;
+  assert.ok(survived, "a write enqueued during a flush must not be discarded");
 });
 
 test("writeQueue notifies subscribers of the pending count as it changes", async () => {

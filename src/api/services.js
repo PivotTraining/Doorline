@@ -43,7 +43,20 @@ export const upsertPost      = (p)      => supabase.from("posts").upsert(M.postT
 export const deletePost      = (id)     => supabase.from("posts").delete().eq("id", id);
 export const upsertTerritory = (t)      => supabase.from("territories").upsert(M.territoryToRow(t, org()));
 export const deleteTerritory = (id)     => supabase.from("territories").delete().eq("id", id);
-export const upsertStreetRow = (r)      => supabase.from("street_rows").upsert(M.streetRowToRow(r, org()));
+// A rep's street-sheet entry is the most loss-sensitive write in the app, so
+// it degrades rather than blocks: if the database predates migration 0017 it
+// has no deal_id column and PostgREST rejects the whole row (PGRST204). Retry
+// once without that one field so the door itself still saves -- losing the
+// deal link is recoverable, losing the entry is not.
+export const upsertStreetRow = async (r) => {
+  const row = M.streetRowToRow(r, org());
+  const res = await supabase.from("street_rows").upsert(row);
+  if (res?.error && "deal_id" in row && /deal_id/.test(res.error.message || "")) {
+    const { deal_id, ...withoutLink } = row;
+    return supabase.from("street_rows").upsert(withoutLink);
+  }
+  return res;
+};
 export const deleteStreetRow = (id)     => supabase.from("street_rows").delete().eq("id", id);
 export const upsertReportBatch = (b)    => supabase.from("report_batches").upsert(M.reportBatchToRow(b, org()));
 export const deleteReportBatch = (id)   => supabase.from("report_batches").delete().eq("id", id);

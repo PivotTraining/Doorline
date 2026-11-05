@@ -24,11 +24,24 @@ const keepVisible = (e) => { e.target.scrollIntoView({ block: "nearest", inline:
 
 const Row = memo(function Row({ slot, id, street, nh, rl, dm, bid, d, ni, nq, customer, phone, comments, cb, dealId, product, products, onSet, onCreate, onRemove, onSetProduct }) {
   const [draft, setDraft] = useState(BLANK);
+  // While a text field is focused, it is its own source of truth. In live
+  // mode every keystroke is written to the server, which echoes the row back
+  // a beat later via Realtime; without this buffer that stale echo merges in
+  // and overwrites what you've since typed — characters "pop back out" and it
+  // looks like you can't type. Showing the buffer while focused makes live
+  // typing immune to those echoes; on blur we fall back to store state (so a
+  // genuine edit from another device still shows).
+  const [editing, setEditing] = useState(null); // { key, value } | null
   const isReal = !!id;
   const cur = isReal ? { street, customer, phone, comments, cb, nh, rl, dm, bid, d, ni, nq } : draft;
 
+  const textVal = (key) => (editing && editing.key === key ? editing.value : (cur[key] ?? ""));
+  const onTextFocus = (key) => (e) => { setEditing({ key, value: cur[key] ?? "" }); keepVisible(e); };
+  const onTextBlur = () => setEditing(null);
+
   const setText = (key) => (e) => {
     const value = e.target.value;
+    setEditing({ key, value });
     if (isReal) { onSet(id, { [key]: value }); return; }
     const merged = { ...draft, [key]: value };
     setDraft(merged);
@@ -46,7 +59,7 @@ const Row = memo(function Row({ slot, id, street, nh, rl, dm, bid, d, ni, nq, cu
   return (
     <tr className={isReal ? undefined : "sheet-row-blank"}>
       <td className="muted" style={{ textAlign: "center" }}>{slot}</td>
-      <td><input className="input" style={pad} value={cur.street} placeholder="Street address" autoComplete="off" onFocus={keepVisible} onChange={setText("street")} /></td>
+      <td><input className="input" style={pad} value={textVal("street")} placeholder="Street address" autoComplete="off" onFocus={onTextFocus("street")} onBlur={onTextBlur} onChange={setText("street")} /></td>
       {SHEET_COLS.map((c) => (
         <td key={c.key} style={cellStyle}>
           <input type="checkbox" checked={!!cur[c.key]} onChange={setFlag(c.key)} style={{ width: 18, height: 18, accentColor: "var(--brand)" }} />
@@ -63,10 +76,10 @@ const Row = memo(function Row({ slot, id, street, nh, rl, dm, bid, d, ni, nq, cu
           )}
         </td>
       ))}
-      <td><input className="input" style={pad} value={cur.customer} autoComplete="off" onFocus={keepVisible} onChange={setText("customer")} /></td>
-      <td><input className="input" style={pad} type="tel" value={cur.phone} placeholder="phone → nudge" autoComplete="off" onFocus={keepVisible} onChange={setText("phone")} /></td>
-      <td><input className="input" style={pad} value={cur.comments} autoComplete="off" onFocus={keepVisible} onChange={setText("comments")} /></td>
-      <td><input className="input" style={pad} value={cur.cb} placeholder="5:30" autoComplete="off" onFocus={keepVisible} onChange={setText("cb")} /></td>
+      <td><input className="input" style={pad} value={textVal("customer")} autoComplete="off" onFocus={onTextFocus("customer")} onBlur={onTextBlur} onChange={setText("customer")} /></td>
+      <td><input className="input" style={pad} type="tel" value={textVal("phone")} placeholder="phone → nudge" autoComplete="off" onFocus={onTextFocus("phone")} onBlur={onTextBlur} onChange={setText("phone")} /></td>
+      <td><input className="input" style={pad} value={textVal("comments")} autoComplete="off" onFocus={onTextFocus("comments")} onBlur={onTextBlur} onChange={setText("comments")} /></td>
+      <td><input className="input" style={pad} value={textVal("cb")} placeholder="5:30" autoComplete="off" onFocus={onTextFocus("cb")} onBlur={onTextBlur} onChange={setText("cb")} /></td>
       <td style={{ paddingLeft: 10 }}>
         {isReal && (
           <button className="x" title="Clear" onClick={() => {
@@ -143,11 +156,12 @@ export default function StreetSheet({ user }) {
         </div>
       </div>
 
-      <div className="cards grid-4" style={{ marginBottom: 14 }}>
+      <div className="cards grid-5" style={{ marginBottom: 14 }}>
         <div className="card stat"><div className="n">{t.doors}</div><div className="l">Doors knocked</div></div>
         <div className="card stat"><div className="n">{t.dm}</div><div className="l">Decision makers</div></div>
         <div className="card stat"><div className="n" style={{ color: "var(--green)" }}>{t.d}</div><div className="l">Deals</div></div>
         <div className="card stat"><div className="n">{t.ni}</div><div className="l">Not interested</div></div>
+        <div className="card stat"><div className="n">{t.nq}</div><div className="l">Not qualified</div></div>
       </div>
 
       <p className="sheet-swipe-hint">↔ Swipe sideways to see Customer, Phone, Comments, and Call Back</p>

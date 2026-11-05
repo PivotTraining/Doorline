@@ -436,6 +436,19 @@ export function repGeofenceStatus(repId) {
   return { inside, zoneName: zones[0].name, at: last.ts };
 }
 
+// Admin-facing geofence alert list: reps who are currently online (actively
+// tracking) AND outside their assigned zone right now. repGeofenceStatus
+// already computes in/out per rep, but it's buried in a table column the
+// admin has to scan row by row — this surfaces just the ones that need
+// attention, so a breach is glanceable instead of easy to miss.
+export function geofenceAlerts() {
+  return state.users
+    .filter((u) => u.role === "rep")
+    .map((u) => ({ rep: u, geo: repGeofenceStatus(u.id), online: !!state.presence[u.id]?.online }))
+    .filter((x) => x.online && x.geo && !x.geo.inside)
+    .map((x) => ({ repId: x.rep.id, repName: x.rep.name, zoneName: x.geo.zoneName, at: x.geo.at }));
+}
+
 // ---------- street sheet ----------
 export function addStreetRow({ repId, date, ...init }) {
   const r = { id: uid(), repId, date, street: "", nh: false, rl: false, dm: false, bid: false, d: false, ni: false, nq: false, customer: "", comments: "", cb: "", phone: "", createdAt: Date.now(), done: false, snoozeUntil: 0, dealId: null, ...init };

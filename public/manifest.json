@@ -1,0 +1,14 @@
+{
+  "name": "Doorline",
+  "short_name": "Doorline",
+  "description": "Door-to-door sales — field & admin in one.",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0e1420",
+  "theme_color": "#2e90fa",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
